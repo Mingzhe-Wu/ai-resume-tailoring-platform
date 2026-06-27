@@ -8,3 +8,11 @@ CREATE TYPE user_status AS ENUM (
     'DISABLED',
     'DELETED'
 );
+
+CREATE TYPE job_status AS ENUM (
+    'SAVED',
+    'APPLIED',
+    'INTERVIEWING',
+    'OFFER',
+    'REJECTED'
+);
