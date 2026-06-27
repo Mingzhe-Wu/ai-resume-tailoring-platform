@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: resumetailor
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/resumetailor?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: resumeuser
+    password: resume123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
