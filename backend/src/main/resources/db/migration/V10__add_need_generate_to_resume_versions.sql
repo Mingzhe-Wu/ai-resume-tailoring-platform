@@ -1,0 +1,2 @@
+ALTER TABLE resume_versions
+ADD COLUMN need_generate BOOLEAN NOT NULL DEFAULT FALSE;
