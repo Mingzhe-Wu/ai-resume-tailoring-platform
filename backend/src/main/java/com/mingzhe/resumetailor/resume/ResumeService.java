@@ -322,8 +322,19 @@ public class ResumeService {
                 
                 Length Optimization:
                 - Optimize the resume for a one-page software engineering resume.
-                - Prioritize preserving the strongest evidence of engineering ability over fitting every piece of information.
                 - Allocate space dynamically based on relevance to the target role.
+                - Keep the overall content concise rather than maximizing every section.
+                - Prioritize preserving the strongest evidence of engineering ability over fitting every piece of information.
+                - Compress lower-priority descriptions before removing high-impact technical accomplishments.
+                - Prefer fewer, stronger, information-dense sentences over many repetitive bullet points.
+                - Prefer less than 450 words for the entire resume.
+                
+                Bullet Allocation:
+                - Allocate bullet points dynamically based on relevance and available space.
+                - The entire resume should typically contain approximately 8–10 bullet points in total.
+                - Highly relevant experiences or projects may receive additional bullet points only if lower-priority sections are compressed accordingly.
+                - Prefer merging related accomplishments into a single stronger bullet rather than creating many short bullets.
+                - Avoid excessive bullet lists for any single experience or project.
                 
                 Summary:
                 - The summary is optional.
@@ -342,7 +353,7 @@ public class ResumeService {
                 - Instead, highlight the technologies most relevant to the target job description.
                 - Curate the skills section instead of listing every available skill.
                 - Include at most 5 skill categories.
-                - Include approximately 20 of the most relevant technical skills.
+                - Include approximately 15 of the most relevant technical skills, preferring the most desired from job description.
                 - Remove outdated, redundant, or low-value skills.
                 - Prefer quality over quantity.
                 - Skill category names do not need to follow any predefined list.
