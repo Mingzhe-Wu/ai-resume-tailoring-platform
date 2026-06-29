@@ -144,6 +144,7 @@ function App() {
 
   const [generatingJobId, setGeneratingJobId] = useState(null);
   const [generatedResume, setGeneratedResume] = useState(null);
+  const [resumeContent, setResumeContent] = useState(null);
   const [resumeLoading, setResumeLoading] = useState(false);
   const [resumePanelError, setResumePanelError] = useState("");
   const [resumePanelMessage, setResumePanelMessage] = useState("");
@@ -191,6 +192,7 @@ function App() {
         if (res.data) {
           clearInterval(intervalId);
           setGeneratedResume(res.data);
+          setResumeContent(deepClone(res.data.generatedContent));
           setResumeLoading(false);
           setResumePanelError("");
           setResumePanelMessage("");
@@ -212,6 +214,7 @@ function App() {
   useEffect(() => {
     if (token && user) {
       fetchJobs();
+      fetchProfileForGreeting();
     }
   }, [token, user]);
 
@@ -261,6 +264,7 @@ function App() {
   useEffect(() => {
     if (!selectedJob) {
       setGeneratedResume(null);
+      setResumeContent(null);
       setResumeLoading(false);
       setResumePanelError("");
       setResumePanelMessage("");
@@ -282,11 +286,14 @@ function App() {
 
       if (response.data) {
         setGeneratedResume(response.data);
+        setResumeContent(deepClone(response.data.generatedContent));
       } else {
         setGeneratedResume(null);
+        setResumeContent(null);
       }
     } catch (err) {
       setGeneratedResume(null);
+      setResumeContent(null);
 
       if (err.response?.status !== 404) {
         setResumePanelError(
@@ -296,6 +303,57 @@ function App() {
     } finally {
       setResumeLoading(false);
     }
+  }
+
+  async function saveResumeContent() {
+    if (!generatedResume || !resumeContent) return;
+
+    try {
+      setResumePanelError("");
+
+      await api.put(`/api/resume/update/${generatedResume.id}`, {
+        generatedContent: JSON.stringify(resumeContent),
+      });
+
+      setGeneratedResume({
+        ...generatedResume,
+        generatedContent: deepClone(resumeContent),
+      });
+      showToast("Generated resume saved.");
+    } catch (err) {
+      showErrorToast(err.response?.data?.message || "Failed to save resume.");
+    }
+  }
+
+  function updateSummaryVisibility(visible) {
+    setResumeContent((currentContent) => {
+      if (!currentContent) return currentContent;
+
+      return {
+        ...currentContent,
+        summary: {
+          ...(currentContent.summary || {}),
+          visible,
+        },
+      };
+    });
+  }
+
+  function updateResumeSectionVisibility(sectionId, visible) {
+    setResumeContent((currentContent) => {
+      if (!currentContent || !Array.isArray(currentContent.sections)) {
+        return currentContent;
+      }
+
+      return {
+        ...currentContent,
+        sections: currentContent.sections.map((section) =>
+          getResumeSectionKey(section) === sectionId
+            ? { ...section, visible }
+            : section
+        ),
+      };
+    });
   }
 
   function clearToastTimers() {
@@ -460,6 +518,20 @@ function App() {
     }
   }
 
+  async function fetchProfileForGreeting() {
+    try {
+      const response = await api.get(`/api/profile/fetch/${user.id}`);
+
+      setProfile(response.data);
+      fillProfileForm(response.data);
+    } catch (err) {
+      if (err.response?.status === 404) {
+        setProfile(null);
+        return;
+      }
+    }
+  }
+
   async function searchJobs(preferredJobId = null) {
     try {
       setJobError("");
@@ -560,6 +632,11 @@ function App() {
 
   function isValidOptionalPriority(value) {
     return value === "" || Number(value) >= 0;
+  }
+
+  function displayableName(value) {
+    const name = value?.trim();
+    return name && name !== "Anonymous User" ? name : "";
   }
 
   function normalizeSectionPayload(type, form, includeProfileId = false) {
@@ -1012,7 +1089,11 @@ function App() {
     setSelectedJob(null);
   }
 
-  const greetingName = profile?.fullName?.trim() || user?.fullName || user?.email;
+  const greetingName =
+    displayableName(profile?.fullName) ||
+    displayableName(user?.fullName) ||
+    user?.email ||
+    "User";
 
   if (token) {
     return (
@@ -1256,7 +1337,7 @@ function App() {
           <div className="resume-preview-panel">
             <div className="resume-preview-card">
               <div className="resume-preview-header">
-                <div>
+                <div className="resume-preview-title">
                   <h2>Resume Preview</h2>
                   <p>
                     {selectedJob
@@ -1264,6 +1345,15 @@ function App() {
                       : "No job selected"}
                   </p>
                 </div>
+                {generatedResume && resumeContent && (
+                  <button
+                    type="button"
+                    className="primary-button resume-save-button"
+                    onClick={saveResumeContent}
+                  >
+                    Save Resume
+                  </button>
+                )}
               </div>
 
               {!selectedJob ? (
@@ -1287,7 +1377,16 @@ function App() {
                     <p className="resume-panel-message">{resumePanelMessage}</p>
                   )}
 
-                  <ResumePreview resume={generatedResume.generatedContent} />
+                  <ResumeBuilderToolbar
+                    resume={resumeContent}
+                    onSummaryToggle={updateSummaryVisibility}
+                    onSectionToggle={updateResumeSectionVisibility}
+                  />
+
+                  <EditableResumePreview
+                    resume={resumeContent}
+                    onChange={setResumeContent}
+                  />
                 </>
               ) : (
                 <div className="resume-empty-state">
@@ -2059,6 +2158,408 @@ function SectionList({
   );
 }
 
+function ResumeBuilderToolbar({ resume, onSummaryToggle, onSectionToggle }) {
+  if (!resume || typeof resume !== "object") return null;
+
+  const sections = Array.isArray(resume.sections)
+    ? [...resume.sections].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    : [];
+
+  return (
+    <div className="resume-builder-toolbar">
+      <label>
+        <input
+          type="checkbox"
+          checked={resume.summary?.visible !== false}
+          onChange={(e) => onSummaryToggle(e.target.checked)}
+        />
+        Summary
+      </label>
+
+      {sections.map((section) => {
+        const type = String(section.type || "").toLowerCase();
+        const sectionKey = getResumeSectionKey(section);
+
+        return (
+          <label key={sectionKey}>
+            <input
+              type="checkbox"
+              checked={section.visible !== false}
+              onChange={(e) => onSectionToggle(sectionKey, e.target.checked)}
+            />
+            {section.title || getResumeSectionTitle(type)}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+function EditableResumePreview({ resume, onChange }) {
+  if (!resume || typeof resume !== "object") {
+    return (
+      <div className="resume-empty-state">
+        <h3>Resume preview unavailable</h3>
+        <p>The generated resume content is not in the expected structured format.</p>
+      </div>
+    );
+  }
+
+  const contact = resume.contact || {};
+  const sections = Array.isArray(resume.sections)
+    ? [...resume.sections]
+        .filter((section) => section.visible !== false)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    : [];
+
+  const contactFields = [
+    ["location", contact.location],
+    ["email", contact.email],
+    ["phone", contact.phone],
+    ["linkedin", contact.linkedin],
+    ["github", contact.github],
+  ];
+
+  const updateContact = (field, value) => {
+    onChange({
+      ...resume,
+      contact: {
+        ...(resume.contact || {}),
+        [field]: value,
+      },
+    });
+  };
+
+  const updateSummary = (value) => {
+    onChange({
+      ...resume,
+      summary: {
+        ...(resume.summary || {}),
+        content: value,
+      },
+    });
+  };
+
+  const updateSection = (nextSection) => {
+    onChange({
+      ...resume,
+      sections: (resume.sections || []).map((section) =>
+        getResumeSectionKey(section) === getResumeSectionKey(nextSection)
+          ? nextSection
+          : section
+      ),
+    });
+  };
+
+  return (
+    <article className="ats-resume">
+      <header className="ats-contact">
+        <h1>
+          <EditableText
+            value={contact.name || ""}
+            placeholder="Candidate Name"
+            onSave={(value) => updateContact("name", value)}
+          />
+        </h1>
+
+        <p className="ats-contact-line">
+          {contactFields.map(([field, value], index) => (
+            <span className="ats-contact-part" key={field}>
+              {index > 0 && <span className="ats-contact-separator">•</span>}
+              <EditableText
+                value={value || ""}
+                placeholder={field}
+                onSave={(nextValue) => updateContact(field, nextValue)}
+              />
+            </span>
+          ))}
+        </p>
+      </header>
+
+      {resume.summary?.visible !== false && (
+        <section className="ats-section">
+          <h2>Summary</h2>
+          <EditableText
+            as="p"
+            className="ats-summary"
+            value={resume.summary?.content || ""}
+            placeholder="Summary"
+            onSave={updateSummary}
+          />
+        </section>
+      )}
+
+      {sections.map((section) => (
+        <EditableResumeSection
+          key={getResumeSectionKey(section)}
+          section={section}
+          onChange={updateSection}
+        />
+      ))}
+    </article>
+  );
+}
+
+function EditableResumeSection({ section, onChange }) {
+  const items = Array.isArray(section.items)
+    ? section.items.filter((item) => item.visible !== false)
+    : [];
+  const type = String(section.type || "").toLowerCase();
+
+  if (items.length === 0) return null;
+
+  const updateItem = (item, nextItem) => {
+    onChange({
+      ...section,
+      items: (section.items || []).map((sectionItem) =>
+        sectionItem === item || (item.id != null && sectionItem.id === item.id)
+          ? nextItem
+          : sectionItem
+      ),
+    });
+  };
+
+  return (
+    <section className="ats-section">
+      <h2>{section.title || getResumeSectionTitle(type)}</h2>
+
+      {type.includes("experience") && items.map((item, index) => (
+        <EditableExperienceItem
+          key={item.id || index}
+          item={item}
+          onChange={(nextItem) => updateItem(item, nextItem)}
+        />
+      ))}
+
+      {type.includes("project") && items.map((item, index) => (
+        <EditableProjectItem
+          key={item.id || index}
+          item={item}
+          onChange={(nextItem) => updateItem(item, nextItem)}
+        />
+      ))}
+
+      {type.includes("education") && items.map((item, index) => (
+        <EditableEducationItem
+          key={item.id || index}
+          item={item}
+          onChange={(nextItem) => updateItem(item, nextItem)}
+        />
+      ))}
+
+      {type.includes("skill") && items.map((item, index) => (
+        <EditableSkillItem
+          key={item.id || index}
+          item={item}
+          onChange={(nextItem) => updateItem(item, nextItem)}
+        />
+      ))}
+    </section>
+  );
+}
+
+function EditableExperienceItem({ item, onChange }) {
+  const title = item.title || item.position || item.role;
+  const company = item.company || item.companyName;
+
+  return (
+    <div className="ats-item">
+      <div className="ats-item-heading">
+        <strong>
+          <EditableText
+            value={company || ""}
+            placeholder="Company"
+            onSave={(value) => onChange(updateFirstExistingField(item, ["company", "companyName"], value))}
+          />
+          <span className="ats-inline-separator"> | </span>
+          <EditableText
+            value={title || ""}
+            placeholder="Title"
+            onSave={(value) => onChange(updateFirstExistingField(item, ["title", "position", "role"], value))}
+          />
+        </strong>
+        <span>
+          <EditableText
+            value={formatDateRange(item.startDate, item.endDate)}
+            placeholder="Date range"
+            onSave={(value) => onChange(updateDateRangeFields(item, value))}
+          />
+        </span>
+      </div>
+      <EditableText
+        as="p"
+        className="ats-meta"
+        value={item.location || ""}
+        placeholder="Location"
+        onSave={(value) => onChange({ ...item, location: value })}
+      />
+      <EditableBulletList
+        bullets={item.bullets || item.details || item.description}
+        onSave={(bullets) => onChange(updateBulletField(item, bullets))}
+      />
+    </div>
+  );
+}
+
+function EditableProjectItem({ item, onChange }) {
+  const name = item.name || item.projectName;
+  const techStack = formatDelimitedList(item.techStack, " • ");
+
+  return (
+    <div className="ats-item">
+      <div className="ats-item-heading">
+        <strong>
+          <EditableText
+            value={name || ""}
+            placeholder="Project name"
+            onSave={(value) => onChange(updateFirstExistingField(item, ["name", "projectName"], value))}
+          />
+        </strong>
+        <span>
+          <EditableText
+            value={formatDateRange(item.startDate, item.endDate)}
+            placeholder="Date range"
+            onSave={(value) => onChange(updateDateRangeFields(item, value))}
+          />
+        </span>
+      </div>
+      <EditableText
+        as="p"
+        className="ats-meta"
+        value={techStack}
+        placeholder="Tech stack"
+        onSave={(value) => onChange({
+          ...item,
+          techStack: parseDelimitedListLike(item.techStack, value, "•"),
+        })}
+      />
+      <EditableBulletList
+        bullets={item.bullets || item.details || item.description}
+        onSave={(bullets) => onChange(updateBulletField(item, bullets))}
+      />
+    </div>
+  );
+}
+
+function EditableEducationItem({ item, onChange }) {
+  const school = item.school || item.schoolName;
+  const degreeLine = [item.degree, item.major].filter(Boolean).join(", ");
+  const dateLine = [item.location, formatDateRange(item.startDate, item.endDate)]
+    .filter(Boolean)
+    .join(" | ");
+  const detailLine = [degreeLine, item.gpa ? `GPA: ${item.gpa}` : ""]
+    .filter(Boolean)
+    .join(" | ");
+
+  return (
+    <div className="ats-item">
+      <div className="ats-item-heading">
+        <strong>
+          <EditableText
+            value={school || ""}
+            placeholder="School"
+            onSave={(value) => onChange(updateFirstExistingField(item, ["school", "schoolName"], value))}
+          />
+        </strong>
+        <span>
+          <EditableText
+            value={dateLine}
+            placeholder="Location | Date range"
+            onSave={(value) => onChange(updateEducationMetaFields(item, value))}
+          />
+        </span>
+      </div>
+      <EditableText
+        as="p"
+        className="ats-meta"
+        value={detailLine}
+        placeholder="Degree, Major | GPA"
+        onSave={(value) => onChange(updateEducationDetailFields(item, value))}
+      />
+      <EditableBulletList
+        bullets={item.details || item.relevantCoursework || item.description}
+        onSave={(bullets) => onChange(updateBulletField(item, bullets))}
+      />
+    </div>
+  );
+}
+
+function EditableSkillItem({ item, onChange }) {
+  const skills = item.skills || item.names || item.items || item.name;
+  const skillText = formatDelimitedList(skills, ", ");
+
+  return (
+    <p className="ats-skill-line">
+      <strong>
+        <EditableText
+          value={item.category || ""}
+          placeholder="Category"
+          onSave={(value) => onChange({ ...item, category: value })}
+        />
+        {": "}
+      </strong>
+      <EditableText
+        value={skillText}
+        placeholder="skill1, skill2, skill3"
+        onSave={(value) => onChange({
+          ...item,
+          [getSkillFieldName(item)]: parseDelimitedListLike(skills, value, ","),
+        })}
+      />
+    </p>
+  );
+}
+
+function EditableBulletList({ bullets, onSave }) {
+  const normalizedBullets = normalizeBullets(bullets);
+
+  if (normalizedBullets.length === 0) return null;
+
+  return (
+    <ul className="ats-bullets">
+      {normalizedBullets.map((bullet, index) => (
+        <li key={index}>
+          <EditableText
+            value={bullet}
+            onSave={(value) => {
+              const nextBullets = [...normalizedBullets];
+              nextBullets[index] = value;
+              onSave(nextBullets);
+            }}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function EditableText({ value, onSave, placeholder = "", as: Tag = "span", className = "", multiline = false }) {
+  const displayValue = value || "";
+
+  if (multiline) {
+    return (
+      <textarea
+        className={`ats-editable ats-editable-textarea ${className}`}
+        value={displayValue}
+        placeholder={placeholder}
+        onChange={(e) => onSave(e.target.value)}
+      />
+    );
+  }
+
+  return (
+    <Tag
+      className={`ats-editable ${className}`}
+      contentEditable
+      suppressContentEditableWarning
+      data-placeholder={placeholder}
+      onBlur={(e) => onSave(e.currentTarget.textContent.trim())}
+    >
+      {displayValue}
+    </Tag>
+  );
+}
+
 function ResumePreview({ resume }) {
   if (!resume || typeof resume !== "object") {
     return (
@@ -2277,6 +2778,99 @@ function getResumeSectionTitle(type) {
   if (type.includes("education")) return "Education";
   if (type.includes("skill")) return "Skills";
   return "Section";
+}
+
+function deepClone(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => deepClone(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, deepClone(item)])
+    );
+  }
+
+  return value;
+}
+
+function getResumeSectionKey(section) {
+  return section.id || `${section.type || "section"}-${section.order ?? ""}-${section.title || ""}`;
+}
+
+function updateFirstExistingField(item, fields, value) {
+  const existingField = fields.find((field) =>
+    Object.prototype.hasOwnProperty.call(item, field)
+  );
+
+  return {
+    ...item,
+    [existingField || fields[0]]: value,
+  };
+}
+
+function updateDateRangeFields(item, value) {
+  const [startDate = "", endDate = ""] = value.split(/\s+-\s+/, 2);
+
+  return {
+    ...item,
+    startDate: startDate.trim(),
+    endDate: endDate.trim() === "Present" ? "" : endDate.trim(),
+  };
+}
+
+function updateEducationMetaFields(item, value) {
+  const [location = "", dateRange = ""] = value.split("|").map((part) => part.trim());
+
+  return {
+    ...updateDateRangeFields(item, dateRange),
+    location,
+  };
+}
+
+function updateEducationDetailFields(item, value) {
+  const parts = value.split("|").map((part) => part.trim()).filter(Boolean);
+  const [degreeMajor = "", gpaPart = ""] = parts;
+  const [degree = "", major = ""] = degreeMajor.split(",").map((part) => part.trim());
+  const gpa = gpaPart.replace(/^GPA:\s*/i, "").trim();
+
+  return {
+    ...item,
+    degree,
+    major,
+    gpa,
+  };
+}
+
+function updateBulletField(item, bullets) {
+  const field = ["bullets", "details", "description", "relevantCoursework"].find((name) =>
+    Object.prototype.hasOwnProperty.call(item, name)
+  ) || "bullets";
+  const existingValue = item[field];
+
+  return {
+    ...item,
+    [field]: Array.isArray(existingValue) ? bullets : bullets.join("\n"),
+  };
+}
+
+function parseDelimitedListLike(originalValue, value, preferredSeparator) {
+  if (!Array.isArray(originalValue)) {
+    return value;
+  }
+
+  const splitter = preferredSeparator === "," ? /,/ : /•|,/;
+
+  return value
+    .split(splitter)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function getSkillFieldName(item) {
+  return ["skills", "names", "items", "name"].find((field) =>
+    Object.prototype.hasOwnProperty.call(item, field)
+  ) || "skills";
 }
 
 function getSectionTitle(type, item) {

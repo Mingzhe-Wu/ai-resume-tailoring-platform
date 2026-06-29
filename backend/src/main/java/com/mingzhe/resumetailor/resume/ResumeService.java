@@ -331,7 +331,7 @@ public class ResumeService {
                 
                 Bullet Allocation:
                 - Allocate bullet points dynamically based on relevance and available space.
-                - The entire resume should typically contain approximately 8–10 bullet points in total.
+                - The entire resume should typically contain approximately 9–12 bullet points in total.
                 - Highly relevant experiences or projects may receive additional bullet points only if lower-priority sections are compressed accordingly.
                 - Prefer merging related accomplishments into a single stronger bullet rather than creating many short bullets.
                 - Avoid excessive bullet lists for any single experience or project.
