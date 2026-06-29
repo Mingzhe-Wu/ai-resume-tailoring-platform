@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import api from "./api";
 import "./App.css";
 
+const TOAST_DISPLAY_MS = 3000;
+const TOAST_EXIT_MS = 140;
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [user, setUser] = useState(() => {
@@ -16,7 +19,10 @@ function App() {
 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState("success");
+  const [toast, setToast] = useState(null);
+  const toastIdRef = useRef(0);
+  const toastDismissTimerRef = useRef(null);
+  const toastReplaceTimerRef = useRef(null);
 
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profile, setProfile] = useState(null);
@@ -229,17 +235,10 @@ function App() {
   }, [jobSearchKeyword, jobStatusFilter]);
 
   useEffect(() => {
-    if (!message && !error) {
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      setMessage("");
-      setError("");
-    }, 3000);
-
-    return () => clearTimeout(timeoutId);
-  }, [message, error]);
+    return () => {
+      clearToastTimers();
+    };
+  }, []);
 
   useEffect(() => {
     if (profileTab !== "skill" || !profile?.id) {
@@ -305,15 +304,67 @@ function App() {
     }
   }
 
+  function clearToastTimers() {
+    if (toastDismissTimerRef.current) {
+      clearTimeout(toastDismissTimerRef.current);
+      toastDismissTimerRef.current = null;
+    }
+
+    if (toastReplaceTimerRef.current) {
+      clearTimeout(toastReplaceTimerRef.current);
+      toastReplaceTimerRef.current = null;
+    }
+  }
+
+  function scheduleToastExit(toastId) {
+    toastDismissTimerRef.current = setTimeout(() => {
+      setToast((currentToast) =>
+        currentToast?.id === toastId
+          ? { ...currentToast, exiting: true }
+          : currentToast
+      );
+
+      toastReplaceTimerRef.current = setTimeout(() => {
+        setToast((currentToast) =>
+          currentToast?.id === toastId ? null : currentToast
+        );
+        toastReplaceTimerRef.current = null;
+      }, TOAST_EXIT_MS);
+
+      toastDismissTimerRef.current = null;
+    }, TOAST_DISPLAY_MS);
+  }
+
   function showToast(text, type = "success") {
-    setError("");
-    setMessageType(type);
-    setMessage(text);
+    const nextToast = {
+      id: toastIdRef.current + 1,
+      message: text,
+      type,
+      exiting: false,
+    };
+    toastIdRef.current = nextToast.id;
+
+    clearToastTimers();
+
+    if (toast) {
+      setToast((currentToast) =>
+        currentToast ? { ...currentToast, exiting: true } : currentToast
+      );
+
+      toastReplaceTimerRef.current = setTimeout(() => {
+        setToast(nextToast);
+        toastReplaceTimerRef.current = null;
+        scheduleToastExit(nextToast.id);
+      }, TOAST_EXIT_MS);
+      return;
+    }
+
+    setToast(nextToast);
+    scheduleToastExit(nextToast.id);
   }
 
   function showErrorToast(text) {
-    setMessage("");
-    setError(text);
+    showToast(text, "danger");
   }
 
   function fillSelectedJobForm(job) {
@@ -984,14 +1035,16 @@ function App() {
           </button>
         </div>
 
-        {(error || message) && (
+        {toast && (
           <div className="dashboard-alert">
-            {error && <p className="error-text">{error}</p>}
-            {message && (
-              <p className={messageType === "danger" ? "danger-text" : "success-text"}>
-                {message}
-              </p>
-            )}
+            <p
+              key={toast.id}
+              className={`${toast.type === "danger" ? "danger-text" : "success-text"} ${
+                toast.exiting ? "toast-exit" : "toast-enter"
+              }`}
+            >
+              {toast.message}
+            </p>
           </div>
         )}
 
@@ -1480,8 +1533,14 @@ function App() {
         )}
 
         {showSectionAddModal && (
-          <div className="modal-overlay">
-            <div className="profile-modal">
+          <div
+            className="modal-overlay"
+            onClick={() => setShowSectionAddModal(false)}
+          >
+            <div
+              className="profile-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
               <button
                 className="close-button"
                 onClick={() => setShowSectionAddModal(false)}
@@ -1749,16 +1808,28 @@ function SectionManager({
   updateSection={updateSection}
   deleteSection={deleteSection}
   canUpdateSection={canUpdateSection}
-/>
-
-      
-
+  headerAction={
+    type === "skill" ? (
       <button
-        className="section-add-card"
+        className="section-add-inline-button"
         onClick={() => openSectionAddModal(type)}
       >
         +
       </button>
+    ) : null
+  }
+/>
+
+      
+
+      {type !== "skill" && (
+        <button
+          className="section-add-card"
+          onClick={() => openSectionAddModal(type)}
+        >
+          +
+        </button>
+      )}
     </>
   );
 }
@@ -1926,10 +1997,14 @@ function SectionList({
   updateSection,
   canUpdateSection,
   deleteSection,
+  headerAction,
 }) {
   return (
     <div className="section-list">
-      <h3>Existing Records</h3>
+      <div className="section-list-header">
+        <h3>Existing Records</h3>
+        {headerAction}
+      </div>
 
       {items && items.length > 0 ? (
         items.map((item) => (
