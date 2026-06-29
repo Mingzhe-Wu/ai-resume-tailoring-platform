@@ -103,6 +103,7 @@ public interface JobMapper {
     List<Job> findByUserId(Long userId);
 
     @Select("""
+        <script>
         SELECT
             id,
             user_id,
@@ -126,29 +127,32 @@ public interface JobMapper {
             updated_at
         FROM jobs
         WHERE user_id = #{userId}
-          AND (
-              #{keyword} IS NULL
-              OR TRIM(#{keyword}) = ''
-              OR title ILIKE '%' || #{keyword} || '%'
-              OR company ILIKE '%' || #{keyword} || '%'
-              OR location ILIKE '%' || #{keyword} || '%'
-              OR job_description ILIKE '%' || #{keyword} || '%'
-              OR notes ILIKE '%' || #{keyword} || '%'
-          )
-          AND (
-              #{status} IS NULL
-              OR status = (
-                  CASE #{status}
-                      WHEN 1 THEN 'SAVED'::job_status
-                      WHEN 2 THEN 'APPLIED'::job_status
-                      WHEN 3 THEN 'INTERVIEWING'::job_status
-                      WHEN 4 THEN 'OFFER'::job_status
-                      WHEN 5 THEN 'REJECTED'::job_status
-                  END
-              )
-          )
-        ORDER BY created_at DESC, id DESC
-        """)
+
+        <if test="keyword != null and keyword.trim() != ''">
+            AND (
+                title ILIKE '%' || #{keyword} || '%'
+                OR company ILIKE '%' || #{keyword} || '%'
+                OR notes ILIKE '%' || #{keyword} || '%'
+            )
+        </if>
+
+        <if test="status != null">
+            AND status = (
+                CASE #{status}
+                    WHEN 1 THEN 'SAVED'::job_status
+                    WHEN 2 THEN 'APPLIED'::job_status
+                    WHEN 3 THEN 'INTERVIEWING'::job_status
+                    WHEN 4 THEN 'OFFER'::job_status
+                    WHEN 5 THEN 'REJECTED'::job_status
+                END
+            )
+        </if>
+
+        ORDER BY priority DESC,
+                created_at DESC,
+                id DESC
+        </script>
+    """)
     List<Job> searchByUserIdAndKeyword(
             @Param("userId") Long userId,
             @Param("keyword") String keyword,

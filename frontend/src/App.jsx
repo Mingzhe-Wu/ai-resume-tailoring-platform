@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "./api";
 import "./App.css";
 
@@ -138,6 +138,7 @@ function App() {
   const [resumeLoading, setResumeLoading] = useState(false);
   const [resumePanelError, setResumePanelError] = useState("");
   const [resumePanelMessage, setResumePanelMessage] = useState("");
+  const didMountJobFilters = useRef(false);
 
   const handleGenerateResume = async (jobId) => {
     const confirmed = window.confirm(
@@ -211,8 +212,13 @@ function App() {
       return;
     }
 
+    if (!didMountJobFilters.current) {
+      didMountJobFilters.current = true;
+      return;
+    }
+
     const timeoutId = setTimeout(() => {
-      fetchJobs(selectedJob?.id);
+      searchJobs(selectedJob?.id);
     }, 400);
 
     return () => clearTimeout(timeoutId);
@@ -366,28 +372,39 @@ function App() {
     try {
       setJobError("");
 
-      const keyword = jobSearchKeyword.trim();
-      const response = hasJobFilters
-        ? await api.get(`/api/jobs/fetchByKey/${user.id}`, {
-            params: {
-              ...(keyword ? { keyword } : {}),
-              ...(jobStatusFilter ? { status: jobStatusFilter } : {}),
-            },
-          })
-        : await api.get(`/api/job/fetch/${user.id}`);
-      setJobs(response.data);
-
-      if (response.data.length > 0) {
-        const nextSelectedJob =
-          response.data.find((job) => job.id === preferredJobId) ||
-          response.data[0];
-        setSelectedJob(nextSelectedJob);
-        fillSelectedJobForm(nextSelectedJob);
-      } else {
-        setSelectedJob(null);
-      }
+      const response = await api.get(`/api/job/fetch/${user.id}`);
+      applyJobList(response.data, preferredJobId);
     } catch (err) {
       setJobError(err.response?.data?.message || "Failed to fetch jobs");
+    }
+  }
+
+  async function searchJobs(preferredJobId = null) {
+    try {
+      setJobError("");
+
+      const response = await api.post("/api/job/search", {
+        userId: user.id,
+        keyword: jobSearchKeyword.trim(),
+        status: jobStatusFilter ? Number(jobStatusFilter) : null,
+      });
+      applyJobList(response.data, preferredJobId);
+    } catch (err) {
+      setJobError(err.response?.data?.message || "Failed to fetch jobs");
+    }
+  }
+
+  function applyJobList(jobList, preferredJobId = null) {
+    setJobs(jobList);
+
+    if (jobList.length > 0) {
+      const nextSelectedJob =
+        jobList.find((job) => job.id === preferredJobId) ||
+        jobList[0];
+      setSelectedJob(nextSelectedJob);
+      fillSelectedJobForm(nextSelectedJob);
+    } else {
+      setSelectedJob(null);
     }
   }
 
@@ -549,6 +566,7 @@ function App() {
       setSelectedJob(null);
     }
 
+    await fetchJobs(updatedJobs[0]?.id);
     setMessage("Job deleted successfully.");
   } catch (err) {
     setJobError(

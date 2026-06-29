@@ -66,21 +66,26 @@ public class JobService {
         return jobMapper.findByUserId(userId);
     }
 
-    public List<Job> searchByUserIdAndKeyword(Long userId, String keyword, Integer status) {
-        User user = userMapper.findById(userId);
+    public List<Job> searchJobs(SearchJobDTO request) {
+        System.out.println(">>> service hit");
+        User user = userMapper.findById(request.getUserId());
         if (user == null) {
             throw new ResourceNotFoundException("User not found");
         }
 
-        if (status != null) {
-            try {
-                JobStatus.fromCode(status);
-            } catch (IllegalArgumentException ex) {
-                throw new BadRequestException(ex.getMessage());
-            }
+        if (request.getStatus() != null) {
+            validateStatus(request.getStatus());
         }
 
-        return jobMapper.searchByUserIdAndKeyword(userId, keyword, status);
+        System.out.println(request.getKeyword());
+        System.out.println(request.getStatus());
+        System.out.println(request.getUserId());
+
+        return jobMapper.searchByUserIdAndKeyword(
+                request.getUserId(),
+                request.getKeyword(),
+                request.getStatus()
+        );
     }
 
     public Job updateJob(Long id, UpdateJobDTO request) {

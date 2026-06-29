@@ -31,13 +31,10 @@ public class JobController {
         return ResponseEntity.ok(jobService.fetchJobsByUserId(userId));
     }
 
-    @GetMapping("/fetchByKey/{userId}")
-    public ResponseEntity<List<Job>> searchByUserIdAndKeyword(
-            @PathVariable Long userId,
-            @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Integer status
-    ) {
-        return ResponseEntity.ok(jobService.searchByUserIdAndKeyword(userId, keyword, status));
+    @PostMapping("/search")
+    public ResponseEntity<List<Job>> searchJobs(@RequestBody @Valid SearchJobDTO request) {
+        System.out.println(">>> search endpoint hit");
+        return ResponseEntity.ok(jobService.searchJobs(request));
     }
 
     @PutMapping("/update/{id}")
