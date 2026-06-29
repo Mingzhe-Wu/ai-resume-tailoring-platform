@@ -150,6 +150,7 @@ function App() {
   const [resumeLoading, setResumeLoading] = useState(false);
   const [resumePanelError, setResumePanelError] = useState("");
   const [resumePanelMessage, setResumePanelMessage] = useState("");
+  const [resumeOutOfBoundary, setResumeOutOfBoundary] = useState(false);
   const didMountJobFilters = useRef(false);
   const resumePreviewRef = useRef(null);
 
@@ -268,6 +269,7 @@ function App() {
     if (!selectedJob) {
       setGeneratedResume(null);
       setResumeContent(null);
+      setResumeOutOfBoundary(false);
       setResumeLoading(false);
       setResumePanelError("");
       setResumePanelMessage("");
@@ -276,6 +278,23 @@ function App() {
 
     fetchResumeForJob(selectedJob.id);
   }, [selectedJob?.id]);
+
+  useEffect(() => {
+    const checkResumeBoundary = () => {
+      const resumeElement = resumePreviewRef.current;
+      setResumeOutOfBoundary(
+        Boolean(resumeElement && resumeElement.scrollHeight > resumeElement.clientHeight + 1)
+      );
+    };
+
+    const frameId = requestAnimationFrame(checkResumeBoundary);
+    window.addEventListener("resize", checkResumeBoundary);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", checkResumeBoundary);
+    };
+  }, [resumeContent, generatedResume?.id, selectedJob?.id]);
 
   async function fetchResumeForJob(jobId, keepMessage = false) {
     try {
@@ -1398,9 +1417,15 @@ function App() {
                   <p>{resumePanelError}</p>
                 </div>
               ) : generatedResume ? (
-                <>
+                <div className="resume-preview-body">
                   {resumePanelMessage && (
                     <p className="resume-panel-message">{resumePanelMessage}</p>
+                  )}
+
+                  {resumeOutOfBoundary && (
+                    <p className="resume-boundary-warning">
+                      Out of boundary, only the part inside paper will be shown on the resume!
+                    </p>
                   )}
 
                   <ResumeBuilderToolbar
@@ -1413,8 +1438,9 @@ function App() {
                     resume={resumeContent}
                     onChange={setResumeContent}
                     resumeRef={resumePreviewRef}
+                    outOfBoundary={resumeOutOfBoundary}
                   />
-                </>
+                </div>
               ) : (
                 <div className="resume-empty-state">
                   <h3>No resume generated yet.</h3>
@@ -2222,7 +2248,7 @@ function ResumeBuilderToolbar({ resume, onSummaryToggle, onSectionToggle }) {
   );
 }
 
-function EditableResumePreview({ resume, onChange, resumeRef }) {
+function EditableResumePreview({ resume, onChange, resumeRef, outOfBoundary = false }) {
   if (!resume || typeof resume !== "object") {
     return (
       <div className="resume-empty-state">
@@ -2279,7 +2305,10 @@ function EditableResumePreview({ resume, onChange, resumeRef }) {
   };
 
   return (
-    <article className="ats-resume" ref={resumeRef}>
+    <article
+      className={outOfBoundary ? "ats-resume ats-resume-out-of-boundary" : "ats-resume"}
+      ref={resumeRef}
+    >
       <header className="ats-contact">
         <h1>
           <EditableText

@@ -1085,6 +1085,26 @@ label {
   line-height: 1.45;
 }
 
+.resume-preview-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.resume-boundary-warning {
+  margin: 14px 22px 0;
+  border: 1px solid rgba(180, 35, 24, 0.28);
+  border-radius: 10px;
+  background: #fff7f7;
+  color: var(--danger);
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .resume-builder-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1125,7 +1145,7 @@ label {
   width: 794px;
   max-width: 100%;
   box-sizing: border-box;
-  min-height: 10.5in;
+  height: 10.5in;
   margin: 18px auto 22px;
   padding: 0.42in 0.5in;
   border: 1px solid #d5dce5;
@@ -1135,7 +1155,13 @@ label {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 12.5px;
   line-height: 1.36;
+  overflow: visible;
   box-shadow: 0 10px 28px rgba(23, 32, 51, 0.08);
+}
+
+.ats-resume-out-of-boundary {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.16), 0 10px 28px rgba(23, 32, 51, 0.08);
 }
 
 .ats-contact {
