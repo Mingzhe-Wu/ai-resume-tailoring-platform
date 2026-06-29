@@ -16,6 +16,7 @@ function App() {
 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("success");
 
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profile, setProfile] = useState(null);
@@ -159,17 +160,17 @@ function App() {
 
       await api.post(`/api/resume/generate-async/${jobId}`);
 
-      setMessage("Resume generation started.");
+      showToast("Resume generation started.");
 
       pollGeneratedResume(jobId);
     } catch (err) {
       const backendMessage = err.response?.data?.message;
       if (backendMessage === "Resume is already up to date.") {
-        setMessage(backendMessage);
+        showToast(backendMessage, "danger");
         setResumePanelMessage(backendMessage);
         fetchResumeForJob(jobId, true);
       } else {
-        setError(backendMessage || "Failed to start resume generation.");
+        showErrorToast(backendMessage || "Failed to start resume generation.");
         setResumePanelError(backendMessage || "Failed to start resume generation.");
       }
       setResumeLoading(false);
@@ -190,7 +191,7 @@ function App() {
           setResumePanelError("");
           setResumePanelMessage("");
           setGeneratingJobId(null);
-          setMessage("Resume generated successfully.");
+          showToast("Resume generated successfully.");
         }
       } catch (err) {
         if (err.response?.status !== 404) {
@@ -198,7 +199,7 @@ function App() {
           setGeneratingJobId(null);
           setResumeLoading(false);
           setResumePanelError("Failed to check generated resume.");
-          setError("Failed to check generated resume.");
+          showErrorToast("Failed to check generated resume.");
         }
       }
     }, 3000);
@@ -228,16 +229,17 @@ function App() {
   }, [jobSearchKeyword, jobStatusFilter]);
 
   useEffect(() => {
-    if (!message) {
+    if (!message && !error) {
       return;
     }
 
     const timeoutId = setTimeout(() => {
       setMessage("");
-    }, 5000);
+      setError("");
+    }, 3000);
 
     return () => clearTimeout(timeoutId);
-  }, [message]);
+  }, [message, error]);
 
   useEffect(() => {
     if (profileTab !== "skill" || !profile?.id) {
@@ -301,6 +303,17 @@ function App() {
     } finally {
       setResumeLoading(false);
     }
+  }
+
+  function showToast(text, type = "success") {
+    setError("");
+    setMessageType(type);
+    setMessage(text);
+  }
+
+  function showErrorToast(text) {
+    setMessage("");
+    setError(text);
   }
 
   function fillSelectedJobForm(job) {
@@ -453,7 +466,7 @@ function App() {
       await refreshSkillSearch(skillSearchName, skillSearchCategory);
     }
     await fetchJobs(selectedJob?.id);
-    setMessage(`${capitalize(type)} deleted successfully.`);
+    showToast(`${getSectionLabel(type)} deleted.`, "danger");
   } catch (err) {
     setSectionError(
       err.response?.data?.message || `Failed to delete ${type}`
@@ -537,6 +550,7 @@ function App() {
       fillSelectedJobForm(response.data);
       setShowJobModal(false);
       await fetchJobs(response.data.id);
+      showToast("Job created.");
     } catch (err) {
       setJobError(err.response?.data?.message || "Failed to create job");
     }
@@ -564,6 +578,7 @@ function App() {
         jobs.map((job) => (job.id === response.data.id ? response.data : job))
       );
       await fetchJobs(response.data.id);
+      showToast("Job saved.");
     } catch (err) {
       setJobError(err.response?.data?.message || "Failed to update job");
     }
@@ -594,7 +609,7 @@ function App() {
     }
 
     await fetchJobs(updatedJobs[0]?.id);
-    setMessage("Job deleted successfully.");
+    showToast("Job deleted.", "danger");
   } catch (err) {
     setJobError(
       err.response?.data?.message || "Failed to delete job"
@@ -652,6 +667,7 @@ function App() {
       setProfile(response.data);
       fillProfileForm(response.data);
       fetchProfileSections(response.data.id);
+      showToast("Profile saved.");
       await fetchJobs(selectedJob?.id);
     } catch (err) {
       setProfileError(err.response?.data?.message || "Failed to create profile");
@@ -671,6 +687,7 @@ function App() {
       setProfile(response.data);
       fillProfileForm(response.data);
       fetchProfileSections(response.data.id);
+      showToast("Profile saved.");
     } catch (err) {
       setProfileError(err.response?.data?.message || "Failed to update profile");
     }
@@ -898,7 +915,7 @@ function App() {
       await refreshSkillSearch(skillSearchName, skillSearchCategory);
       await fetchJobs(selectedJob?.id);
 
-      setMessage(
+      showToast(
         `Imported ${response.data.successCount} skills, failed ${response.data.failedCount} rows.`
       );
     } catch (err) {
@@ -928,6 +945,7 @@ function App() {
         await refreshSkillSearch(skillSearchName, skillSearchCategory);
       }
       await fetchJobs(selectedJob?.id);
+      showToast(`${getSectionLabel(profileTab)} saved.`);
     } catch (err) {
       setSectionError(
         err.response?.data?.message || `Failed to update ${profileTab}`
@@ -969,7 +987,11 @@ function App() {
         {(error || message) && (
           <div className="dashboard-alert">
             {error && <p className="error-text">{error}</p>}
-            {message && <p className="success-text">{message}</p>}
+            {message && (
+              <p className={messageType === "danger" ? "danger-text" : "success-text"}>
+                {message}
+              </p>
+            )}
           </div>
         )}
 
@@ -1240,7 +1262,7 @@ function App() {
                         });
 
                         setResumePanelMessage("Resume saved successfully.");
-                        setMessage("Resume saved successfully.");
+                        showToast("Generated resume saved.");
                       }}
                     >
                       Save Resume
@@ -1258,8 +1280,14 @@ function App() {
         </div>
 
         {showJobModal && (
-          <div className="modal-overlay">
-            <div className="profile-modal">
+          <div
+            className="modal-overlay"
+            onClick={() => setShowJobModal(false)}
+          >
+            <div
+              className="profile-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
               <button
                 className="close-button"
                 onClick={() => setShowJobModal(false)}
@@ -1362,8 +1390,14 @@ function App() {
         )}
 
         {showProfileModal && (
-          <div className="modal-overlay">
-            <div className="profile-modal large-modal">
+          <div
+            className="modal-overlay"
+            onClick={() => setShowProfileModal(false)}
+          >
+            <div
+              className="profile-modal large-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
               <button
                 className="close-button"
                 onClick={() => setShowProfileModal(false)}
@@ -1984,6 +2018,17 @@ function getSectionItems(type, collections) {
 
 function capitalize(text) {
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function getSectionLabel(type) {
+  const labels = {
+    education: "Education",
+    experience: "Experience",
+    project: "Project",
+    skill: "Skill",
+  };
+
+  return labels[type] || capitalize(type);
 }
 
 export default App;

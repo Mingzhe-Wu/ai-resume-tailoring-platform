@@ -124,7 +124,8 @@ input:focus {
   border: 1px solid #bfd2e6;
 }
 
-.error-text {
+.error-text,
+.danger-text {
   margin: 4px 0;
   color: #b42318;
   font-size: 14px;
@@ -663,13 +664,15 @@ label {
 }
 
 .error-text,
-.success-text {
+.success-text,
+.danger-text {
   border-radius: 10px;
   padding: 10px 12px;
   line-height: 1.45;
 }
 
-.error-text {
+.error-text,
+.danger-text {
   background: #fff5f5;
   border: 1px solid rgba(180, 35, 24, 0.18);
 }
@@ -722,7 +725,7 @@ label {
   position: fixed;
   top: 76px;
   left: 50%;
-  z-index: 2;
+  z-index: 40;
   width: min(620px, calc(100vw - 64px));
   transform: translateX(-50%);
 }
@@ -731,6 +734,26 @@ label {
   margin: 0;
   text-align: center;
   box-shadow: var(--shadow-soft);
+  animation: toast-slide-fade 3s ease forwards;
+}
+
+@keyframes toast-slide-fade {
+  0% {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  8% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  86% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
 }
 
 .dashboard-layout {
