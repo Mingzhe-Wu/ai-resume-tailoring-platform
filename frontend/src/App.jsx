@@ -1765,7 +1765,13 @@ function SectionManager({
               }
             }}
           />
-          <p className="empty-text">CSV format: category,name</p>
+          <button
+            type="button"
+            className="csv-template-button"
+            onClick={downloadSkillCsvTemplate}
+          >
+            Download CSV template
+          </button>
         </div>
       )}
 
@@ -2104,6 +2110,20 @@ function getSectionLabel(type) {
   };
 
   return labels[type] || capitalize(type);
+}
+
+function downloadSkillCsvTemplate() {
+  const csvContent = "category,name\r\nexample_category_1,example_name_1\r\nexample_category_2,example_name_2\r\n";
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = "skill_import_template.csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 export default App;

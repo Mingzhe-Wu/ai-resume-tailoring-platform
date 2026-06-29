@@ -1207,6 +1207,29 @@ label {
   background: var(--surface-soft);
 }
 
+.csv-template-button {
+  width: fit-content;
+  min-height: 38px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--primary);
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.csv-template-button:hover {
+  background: var(--surface-blue);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-soft);
+  transform: translateY(-1px);
+}
+
   .section-action-row {
   border-top: 1px solid var(--border);
   padding-top: 14px;
