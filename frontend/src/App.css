@@ -1231,6 +1231,131 @@ label {
   color: var(--primary-strong);
 }
 
+.keyword-hints-panel {
+  margin: 14px 22px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fbfdff;
+  overflow: hidden;
+}
+
+.keyword-hints-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 11px 14px;
+  border: none;
+  background: transparent;
+  color: var(--primary-strong);
+  font-size: 13px;
+  font-weight: 900;
+  text-align: left;
+  cursor: pointer;
+}
+
+.keyword-hints-toggle:hover,
+.keyword-hints-toggle:focus-visible {
+  background: var(--surface-blue);
+  outline: none;
+}
+
+.keyword-hints-toggle-meta {
+  flex: 1;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.keyword-hints-toggle-icon {
+  min-width: 42px;
+  color: var(--primary-strong);
+  font-size: 11px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.keyword-hints-content {
+  padding: 0 14px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.keyword-hints-subtitle {
+  margin: 0;
+  padding-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.keyword-hints-section {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.keyword-hints-section-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.keyword-hints-category {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.keyword-hints-category-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.8;
+}
+
+.keyword-hints-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.keyword-hints-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.keyword-hints-chip.covered {
+  border-color: rgba(47, 125, 101, 0.24);
+  background: #effaf4;
+  color: #246c58;
+}
+
+.keyword-hints-chip.missing {
+  border-color: #dbe4ef;
+  background: #f7f9fc;
+  color: #6b7280;
+}
+
+.keyword-hints-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .resume-method-help {
   position: relative;
   display: inline-flex;
@@ -1805,6 +1930,20 @@ label {
   .resume-save-button,
   .resume-export-button {
     width: auto;
+  }
+
+  .keyword-hints-toggle {
+    flex-wrap: wrap;
+  }
+
+  .keyword-hints-toggle-meta {
+    order: 3;
+    flex-basis: 100%;
+    text-align: left;
+  }
+
+  .keyword-hints-category {
+    grid-template-columns: 1fr;
   }
 
   .job-detail-card {

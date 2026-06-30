@@ -274,7 +274,7 @@ public class ResumeService {
         }
 
         String resumeContext = resumeContextBuilderService.buildResumeContext(userId, retrievalResult, false);
-        log.info("RAG resume context for jobId={}:\n{}", jobId, resumeContext);
+        // log.info("RAG resume context for jobId={}:\n{}", jobId, resumeContext);
 
         String prompt = buildRagPrompt(job, resumeContext);
         String aiResponse = callLlmWithRetry(prompt);

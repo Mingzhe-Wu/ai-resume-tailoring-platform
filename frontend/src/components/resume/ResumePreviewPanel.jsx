@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import EditableResumePreview from "./EditableResumePreview.jsx";
 import ResumeBuilderToolbar from "./ResumeBuilderToolbar.jsx";
+import {
+  getKeywordHints,
+  groupKeywordHintsByCategory,
+} from "../../utils/keywordHints.js";
 
 export default function ResumePreviewPanel({
   selectedJob,
@@ -21,6 +25,13 @@ export default function ResumePreviewPanel({
 }) {
   const [resumeOutOfBoundary, setResumeOutOfBoundary] = useState(false);
   const selectedMethodLabel = selectedResumeMethod === "RAG" ? "RAG" : "Normal";
+  const keywordHints = getKeywordHints(selectedJob?.jobDescription, resumeContent);
+  const coveredKeywordGroups = groupKeywordHintsByCategory(
+    keywordHints.filter((hint) => hint.covered)
+  );
+  const missingKeywordGroups = groupKeywordHintsByCategory(
+    keywordHints.filter((hint) => !hint.covered)
+  );
 
   useEffect(() => {
     if (!selectedJob) {
@@ -123,6 +134,12 @@ export default function ResumePreviewPanel({
               </p>
             )}
 
+            <KeywordHintsPanel
+              keywordHints={keywordHints}
+              coveredKeywordGroups={coveredKeywordGroups}
+              missingKeywordGroups={missingKeywordGroups}
+            />
+
             <ResumeBuilderToolbar
               resume={resumeContent}
               onSummaryToggle={onSummaryToggle}
@@ -150,6 +167,92 @@ export default function ResumePreviewPanel({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function KeywordHintsPanel({
+  keywordHints,
+  coveredKeywordGroups,
+  missingKeywordGroups,
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const hasHints = keywordHints.length > 0;
+  const coveredCount = keywordHints.filter((hint) => hint.covered).length;
+  const missingCount = keywordHints.length - coveredCount;
+
+  return (
+    <div className="keyword-hints-panel">
+      <button
+        type="button"
+        className="keyword-hints-toggle"
+        aria-expanded={isExpanded}
+        onClick={() => setIsExpanded((current) => !current)}
+      >
+        <span>JD Keyword Hints</span>
+        <span className="keyword-hints-toggle-meta">
+          {hasHints
+            ? `${coveredCount} covered / ${missingCount} not found`
+            : "No tracked keywords"}
+        </span>
+        <span className="keyword-hints-toggle-icon">{isExpanded ? "Hide" : "Show"}</span>
+      </button>
+
+      {isExpanded && (
+        <div className="keyword-hints-content">
+          <p className="keyword-hints-subtitle">
+            Simple keyword hints only. Use them as a manual review checklist.
+          </p>
+
+          {!hasHints ? (
+            <p className="keyword-hints-empty">No tracked JD keywords detected yet.</p>
+          ) : (
+            <>
+              <KeywordHintsSection
+                title="Covered terms"
+                groups={coveredKeywordGroups}
+                chipType="covered"
+                emptyText="No tracked terms covered yet."
+              />
+              <KeywordHintsSection
+                title="Not found in current resume"
+                groups={missingKeywordGroups}
+                chipType="missing"
+                emptyText="All tracked JD terms are covered."
+              />
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KeywordHintsSection({ title, groups, chipType, emptyText }) {
+  const categories = Object.keys(groups);
+
+  return (
+    <div className="keyword-hints-section">
+      <h4 className="keyword-hints-section-title">{title}</h4>
+      {categories.length === 0 ? (
+        <p className="keyword-hints-empty">{emptyText}</p>
+      ) : (
+        categories.map((category) => (
+          <div className="keyword-hints-category" key={category}>
+            <span className="keyword-hints-category-label">{category}</span>
+            <div className="keyword-hints-chip-row">
+              {groups[category].map((hint) => (
+                <span
+                  className={`keyword-hints-chip ${chipType}`}
+                  key={`${category}-${hint.term}`}
+                >
+                  {hint.term}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))
+      )}
     </div>
   );
 }
