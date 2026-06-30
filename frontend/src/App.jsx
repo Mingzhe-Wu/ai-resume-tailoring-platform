@@ -26,9 +26,9 @@ function ResumeGenerationHelp({ className = "" }) {
       </button>
       <div className="resume-method-tooltip" role="tooltip">
         <strong>Normal</strong>
-        <p>Better when you want AI to reshape your profile around a role direction.</p>
+        <p>Best for most users and early drafts. AI uses your full profile to organize, expand, compress, and shape a polished resume.</p>
         <strong>RAG</strong>
-        <p>Better when your profile already has many detailed bullets and you want stricter JD-matching from existing evidence.</p>
+        <p>Best when factual grounding and JD-specific evidence selection matter more than creative rewriting. Works best when your profile already contains many detailed, well-written bullets.</p>
       </div>
     </div>
   );
