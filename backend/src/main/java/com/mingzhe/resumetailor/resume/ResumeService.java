@@ -689,6 +689,293 @@ public class ResumeService {
         return sb.toString();
     }
 
+    public String buildRagPrompt(Job job, String resumeContext) {
+        if (job == null) {
+            throw new IllegalArgumentException("Job cannot be null.");
+        }
+
+        if (!hasText(resumeContext)) {
+            throw new IllegalArgumentException("Resume context cannot be blank.");
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+// =========================================================================
+// Core Identity & Output Contract
+// =========================================================================
+
+        sb.append("""
+                You are a senior software engineering resume writer.
+                
+                Generate a concise, ATS-friendly, technically credible software engineering resume tailored to the target job.
+                
+                The resume should feel realistic, polished, and intentionally curated for the target role while remaining believable for a strong new graduate software engineering candidate.
+                
+                Output only valid JSON that strictly follows the required schema.
+                Do not output Markdown, explanations, comments, or plain resume text.
+                
+                """);
+
+// =========================================================================
+// RAG Resume Generation Policy
+// =========================================================================
+
+        sb.append("""
+                RAG Resume Generation Policy:
+                - The Candidate Resume Context is the only source of truth for the candidate's background.
+                - Do not fabricate employers, job titles, dates, education, projects, skills, technologies, metrics, certifications, awards, or experience.
+                - You may rewrite, compress, merge, and polish the provided bullet points for clarity, relevance, and impact.
+                - Every generated bullet must be grounded in the Candidate Resume Context.
+                - Do not introduce new technical claims that are not supported by the Candidate Resume Context.
+                - Prefer omission over exaggeration.
+                - Keep the resume realistic for a strong new graduate software engineering candidate.
+                - The retrieved experience and project bullets are already relevance-filtered, so do not over-optimize by inventing new content.
+                - Use the target job description only to decide wording, ordering, emphasis, and skill selection.
+                
+                Writing Style:
+                - Write concise, technically dense, engineering-oriented bullet points.
+                - Keep most bullets around 20-35 words.
+                - Use strong action verbs such as Developed, Built, Designed, Implemented, Automated, Integrated, Diagnosed, Refined, and Debugged.
+                - Use past tense for completed work.
+                - Prefer implementation details, debugging, workflows, APIs, persistence, automation, testing, integration, and operational behavior.
+                - Avoid weak phrases such as Responsible for, Worked on, Helped with, Assisted with, or Participated in.
+                - Avoid excessive buzzwords, keyword stuffing, and mechanically stacking too many technologies into one bullet.
+                - Prefer natural engineering language commonly used in real production environments.
+                
+                Length and Content Selection:
+                - Keep the resume concise and one-page friendly.
+                - Prefer the retrieved experience and project evidence, but remove or merge redundant bullets if necessary.
+                - Do not force every retrieved bullet into the final resume if it becomes repetitive.
+                - Do not exceed the existing renderer/schema expectations.
+                - Summary is optional and should be 1-2 lines if included.
+                - Prefer fewer, stronger, information-dense bullets over many repetitive bullets.
+                
+                Skills:
+                - Curate the Skills section based on the target job description.
+                - Do not list every skill from the Candidate Resume Context.
+                - Select only the most relevant skills from the provided skill categories.
+                - Include at most 5 skill categories.
+                - Include approximately 15-20 highly relevant technical skills total.
+                - Remove outdated, redundant, generic, or low-value skills.
+                - Prefer skills that are directly supported by the Candidate Resume Context and useful for the target job.
+                - Skill category names may be reorganized if it improves clarity.
+                - Do not invent skills not present in the Candidate Resume Context.
+                
+                """);
+
+// =========================================================================
+// Dynamic Role Focus
+// =========================================================================
+
+        String jdText = (
+                (job.getTitle() == null ? "" : job.getTitle()) + " " +
+                        (job.getJobDescription() == null ? "" : job.getJobDescription())
+        ).toLowerCase();
+
+        if (
+                jdText.contains("embedded") ||
+                        jdText.contains("robotics") ||
+                        jdText.contains("autonomous") ||
+                        jdText.contains("linux") ||
+                        jdText.contains("hardware") ||
+                        jdText.contains("sensor") ||
+                        jdText.contains("c++")
+        ) {
+
+            sb.append("""
+                    Detected Role Focus:
+                    This appears to be a systems, embedded, robotics, or low-level engineering role.
+                    Prioritize supported systems-oriented evidence from the Candidate Resume Context, such as C/C++, Linux, debugging, hardware-software integration, sensor processing, networking, and performance work.
+                    Do not invent systems experience if it is not present in the Candidate Resume Context.
+                    
+                    """);
+        }
+
+        if (
+                jdText.contains("ai") ||
+                        jdText.contains("llm") ||
+                        jdText.contains("openai") ||
+                        jdText.contains("prompt") ||
+                        jdText.contains("agent") ||
+                        jdText.contains("machine learning")
+        ) {
+
+            sb.append("""
+                    Detected Role Focus:
+                    This appears to be an AI application or AI-adjacent software engineering role.
+                    Prioritize supported evidence around API integration, structured workflows, automation, backend orchestration, debugging, prompt construction, persistence workflows, and reliable service behavior.
+                    Avoid overstating ML research, model training, or distributed AI infrastructure unless explicitly present in the Candidate Resume Context.
+                    
+                    """);
+        }
+
+        if (
+                jdText.contains("backend") ||
+                        jdText.contains("api") ||
+                        jdText.contains("spring") ||
+                        jdText.contains("java") ||
+                        jdText.contains("database")
+        ) {
+
+            sb.append("""
+                    Detected Role Focus:
+                    This appears to be a backend or service-oriented engineering role.
+                    Prioritize supported backend evidence from the Candidate Resume Context, such as Java, Spring Boot, REST APIs, MyBatis, validation, persistence, debugging, operational workflows, and service logic.
+                    
+                    """);
+        }
+
+// =========================================================================
+// Required JSON Schema
+// =========================================================================
+
+        sb.append("""
+                Required JSON Output Schema:
+                
+                {
+                  "template": "ATS",
+                  "contact": {
+                    "name": "",
+                    "location": "",
+                    "email": "",
+                    "phone": "",
+                    "linkedin": "",
+                    "github": ""
+                  },
+                  "summary": {
+                    "visible": true,
+                    "content": ""
+                  },
+                  "sections": [
+                    {
+                      "id": "education",
+                      "type": "education",
+                      "title": "Education",
+                      "visible": true,
+                      "order": 1,
+                      "items": [
+                        {
+                          "school": "",
+                          "degree": "",
+                          "major": "",
+                          "location": "",
+                          "startDate": "",
+                          "endDate": "",
+                          "gpa": "",
+                          "details": []
+                        }
+                      ]
+                    },
+                    {
+                      "id": "experience",
+                      "type": "experience",
+                      "title": "Experience",
+                      "visible": true,
+                      "order": 2,
+                      "items": [
+                        {
+                          "company": "",
+                          "title": "",
+                          "location": "",
+                          "startDate": "",
+                          "endDate": "",
+                          "visible": true,
+                          "bullets": []
+                        }
+                      ]
+                    },
+                    {
+                      "id": "projects",
+                      "type": "projects",
+                      "title": "Projects",
+                      "visible": true,
+                      "order": 3,
+                      "items": [
+                        {
+                          "name": "",
+                          "techStack": [],
+                          "startDate": "",
+                          "endDate": "",
+                          "visible": true,
+                          "bullets": []
+                        }
+                      ]
+                    },
+                    {
+                      "id": "skills",
+                      "type": "skills",
+                      "title": "Skills",
+                      "visible": true,
+                      "order": 4,
+                      "items": [
+                        {
+                          "category": "",
+                          "skills": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+                
+                JSON Rules:
+                - Return exactly one JSON object.
+                - Do not wrap the JSON in Markdown code fences.
+                - Do not include any text before or after the JSON.
+                - Use double quotes for all JSON keys and string values.
+                - Use arrays for bullets, details, skills, techStack, sections, and items.
+                - Exclude null or empty fields when possible.
+                - Do not include trailing commas.
+                - Do not include null values.
+                - Do not include empty strings if the field is unavailable.
+                - If a section has no usable content, omit that section.
+                - Section order should reflect the best resume layout for the target job.
+                - Each section and item should include "visible": true.
+                - Keep "template" as "ATS".
+                - The renderer will determine visual formatting.
+                - Focus on producing semantically correct resume content rather than presentation.
+                - The JSON must be directly parseable by Jackson ObjectMapper.
+                
+                """);
+
+// =========================================================================
+// Target Job
+// =========================================================================
+
+        sb.append("<TargetJob>\n");
+
+        appendIfPresent(sb, "Title: ", job.getTitle());
+        appendIfPresent(sb, "Company: ", job.getCompany());
+
+        if (hasText(job.getJobDescription())) {
+            sb.append("Description:\n")
+                    .append(job.getJobDescription())
+                    .append("\n");
+        }
+
+        sb.append("</TargetJob>\n\n");
+
+// =========================================================================
+// Candidate Resume Context
+// =========================================================================
+
+        sb.append("<CandidateResumeContext>\n")
+                .append(resumeContext)
+                .append("\n</CandidateResumeContext>\n\n");
+
+// =========================================================================
+// Final Reminder
+// =========================================================================
+
+        sb.append("""
+                Final Reminder:
+                Output only the JSON object.
+                Do not include Markdown, commentary, explanations, or plain resume text.
+                The response must be valid JSON and directly parseable by Jackson ObjectMapper.
+                """);
+
+        return sb.toString();
+    }
+
 
     private void appendIfPresent(StringBuilder sb, String label, Object value) {
         if (value != null && hasText(String.valueOf(value))) {
