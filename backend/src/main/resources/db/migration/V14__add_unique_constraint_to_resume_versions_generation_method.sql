@@ -1,0 +1,3 @@
+ALTER TABLE resume_versions
+ADD CONSTRAINT uk_resume_versions_job_generation_method
+UNIQUE (job_id, generation_method);

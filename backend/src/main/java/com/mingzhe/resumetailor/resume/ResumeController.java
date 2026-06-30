@@ -25,8 +25,11 @@ public class ResumeController {
     }
 
     @GetMapping("/fetch/{jobId}")
-    public ResponseEntity<ResumeResponseDTO> getResumesByJobId(@PathVariable Long jobId) {
-        return ResponseEntity.ok(resumeService.fetchResumesByJobId(jobId));
+    public ResponseEntity<ResumeResponseDTO> getResumesByJobId(
+            @PathVariable Long jobId,
+            @RequestParam(required = false) ResumeGenerationMethod generationMethod
+    ) {
+        return ResponseEntity.ok(resumeService.fetchResumesByJobId(jobId, generationMethod));
     }
 
     @PutMapping("/update/{id}")
@@ -53,8 +56,8 @@ public class ResumeController {
 
     @PostMapping("/generate-async/{jobId}")
     public ResponseEntity<String> generateResumeAsync(@PathVariable Long jobId) {
-        resumeService.ensureGenerationAllowed(jobId);
-        resumeService.markExistingResumeDirtyForGeneration(jobId);
+        resumeService.ensureGenerationAllowed(jobId, ResumeGenerationMethod.NORMAL);
+        resumeService.markExistingResumeDirtyForGeneration(jobId, ResumeGenerationMethod.NORMAL);
         resumeService.generateResumeAsync(jobId);
         return ResponseEntity.ok("Resume generation started asynchronously");
     }

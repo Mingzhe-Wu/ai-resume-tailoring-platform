@@ -6,7 +6,10 @@ export default function ResumePreviewPanel({
   selectedJob,
   generatedResume,
   resumeContent,
+  selectedResumeMethod,
+  onResumeMethodChange,
   resumeLoading,
+  resumeGenerating,
   resumePanelError,
   resumePanelMessage,
   onSaveResume,
@@ -17,6 +20,7 @@ export default function ResumePreviewPanel({
   resumePreviewRef,
 }) {
   const [resumeOutOfBoundary, setResumeOutOfBoundary] = useState(false);
+  const selectedMethodLabel = selectedResumeMethod === "RAG" ? "RAG" : "Normal";
 
   useEffect(() => {
     if (!selectedJob) {
@@ -44,6 +48,7 @@ export default function ResumePreviewPanel({
     <div className="resume-preview-panel">
       <div className="resume-preview-card">
         <div className="resume-preview-header">
+          <div className="resume-preview-spacer" />
           <div className="resume-preview-title">
             <h2>Resume Preview</h2>
             <p>
@@ -72,14 +77,33 @@ export default function ResumePreviewPanel({
           )}
         </div>
 
+        {selectedJob && (
+          <div className="resume-method-selector" aria-label="Resume version selector">
+            <button
+              type="button"
+              className={selectedResumeMethod === "NORMAL" ? "active" : ""}
+              onClick={() => onResumeMethodChange("NORMAL")}
+            >
+              Normal
+            </button>
+            <button
+              type="button"
+              className={selectedResumeMethod === "RAG" ? "active" : ""}
+              onClick={() => onResumeMethodChange("RAG")}
+            >
+              RAG
+            </button>
+          </div>
+        )}
+
         {!selectedJob ? (
           <div className="resume-empty-state">
             <h3>Select a job</h3>
             <p>Select a job to view or generate a resume.</p>
           </div>
-        ) : resumeLoading ? (
+        ) : resumeGenerating ? (
           <div className="resume-empty-state">
-            <h3>Generating resume...</h3>
+            <h3>Generating {selectedMethodLabel} resume...</h3>
             <p>This panel will update when the resume is ready.</p>
           </div>
         ) : resumePanelError ? (
@@ -112,10 +136,17 @@ export default function ResumePreviewPanel({
               outOfBoundary={resumeOutOfBoundary}
             />
           </div>
+        ) : resumeLoading ? (
+          <div className="resume-empty-state">
+            <h3>Loading {selectedMethodLabel} resume...</h3>
+            <p>Checking the selected resume version.</p>
+          </div>
         ) : (
           <div className="resume-empty-state">
-            <h3>No resume generated yet.</h3>
-            <p>Click Generate Resume to create one.</p>
+            <h3>No {selectedMethodLabel} resume generated yet.</h3>
+            <p>
+              Click {selectedResumeMethod === "RAG" ? "Generate with RAG" : "Generate Resume"} to create one.
+            </p>
           </div>
         )}
       </div>

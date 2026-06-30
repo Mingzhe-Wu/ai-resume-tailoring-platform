@@ -12,11 +12,13 @@ public interface ResumeMapper {
         INSERT INTO resume_versions (
             job_id,
             match_score,
-            generated_content
+            generated_content,
+            generation_method
         ) VALUES (
             #{jobId},
             #{matchScore},
-            CAST(#{generatedContent} AS jsonb)
+            CAST(#{generatedContent} AS jsonb),
+            CAST(#{generationMethod} AS resume_generation_method)
         )
         """)
     @Options(useGeneratedKeys = true, keyProperty = "id")
@@ -29,6 +31,7 @@ public interface ResumeMapper {
             match_score,
             generated_content,
             need_generate,
+            generation_method,
             created_at,
             updated_at
         FROM resume_versions
@@ -43,6 +46,7 @@ public interface ResumeMapper {
             match_score,
             generated_content,
             need_generate,
+            generation_method,
             created_at,
             updated_at
         FROM resume_versions
@@ -52,6 +56,26 @@ public interface ResumeMapper {
         """)
     Resume findByJobId(Long jobId);
 
+    @Select("""
+        SELECT
+            id,
+            job_id,
+            match_score,
+            generated_content,
+            need_generate,
+            generation_method,
+            created_at,
+            updated_at
+        FROM resume_versions
+        WHERE job_id = #{jobId}
+          AND generation_method = CAST(#{generationMethod} AS resume_generation_method)
+        LIMIT 1
+        """)
+    Resume findByJobIdAndGenerationMethod(
+            @Param("jobId") Long jobId,
+            @Param("generationMethod") ResumeGenerationMethod generationMethod
+    );
+
     @Update("""
         <script>
         UPDATE resume_versions
@@ -59,6 +83,7 @@ public interface ResumeMapper {
             <if test="matchScore != null">match_score = #{matchScore},</if>
             <if test="generatedContent != null">generated_content = CAST(#{generatedContent} AS jsonb),</if>
             <if test="needGenerate != null">need_generate = #{needGenerate},</if>
+            <if test="generationMethod != null">generation_method = CAST(#{generationMethod} AS resume_generation_method),</if>
             updated_at = NOW()
         </set>
         WHERE id = #{id}
@@ -73,6 +98,18 @@ public interface ResumeMapper {
         WHERE job_id = #{jobId}
         """)
     int markResumeDirtyByJobId(Long jobId);
+
+    @Update("""
+        UPDATE resume_versions
+        SET need_generate = TRUE,
+            updated_at = NOW()
+        WHERE job_id = #{jobId}
+          AND generation_method = CAST(#{generationMethod} AS resume_generation_method)
+        """)
+    int markResumeDirtyByJobIdAndGenerationMethod(
+            @Param("jobId") Long jobId,
+            @Param("generationMethod") ResumeGenerationMethod generationMethod
+    );
 
     @Update("""
         UPDATE resume_versions rv

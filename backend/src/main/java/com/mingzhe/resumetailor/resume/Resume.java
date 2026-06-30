@@ -20,6 +20,8 @@ public class Resume {
 
     private Boolean needGenerate;
 
+    private ResumeGenerationMethod generationMethod;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

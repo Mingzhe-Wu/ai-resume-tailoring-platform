@@ -12,6 +12,7 @@ public class ResumeResponseDTO {
     private Integer matchScore;
     private JsonNode generatedContent;
     private Boolean needGenerate;
+    private ResumeGenerationMethod generationMethod;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

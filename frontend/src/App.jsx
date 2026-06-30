@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api, { getApiErrorMessage } from "./api";
 import ResumePreviewPanel from "./components/resume/ResumePreviewPanel.jsx";
 import { exportResumeElementToPdf } from "./components/resume/resumePdfExport.js";
@@ -11,6 +11,8 @@ import "./App.css";
 
 const TOAST_DISPLAY_MS = 3000;
 const TOAST_EXIT_MS = 140;
+const RESUME_METHOD_NORMAL = "NORMAL";
+const RESUME_METHOD_RAG = "RAG";
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
@@ -150,13 +152,30 @@ function App() {
     isValidOptionalPriority(selectedJobForm.priority);
 
   const [generatingJobId, setGeneratingJobId] = useState(null);
-  const [generatedResume, setGeneratedResume] = useState(null);
+  const [generatingResumeMethod, setGeneratingResumeMethod] = useState(null);
+  const [selectedResumeMethod, setSelectedResumeMethod] = useState(RESUME_METHOD_NORMAL);
+  const [resumeVersions, setResumeVersions] = useState({
+    [RESUME_METHOD_NORMAL]: null,
+    [RESUME_METHOD_RAG]: null,
+  });
   const [resumeContent, setResumeContent] = useState(null);
   const [resumeLoading, setResumeLoading] = useState(false);
   const [resumePanelError, setResumePanelError] = useState("");
   const [resumePanelMessage, setResumePanelMessage] = useState("");
   const didMountJobFilters = useRef(false);
   const resumePreviewRef = useRef(null);
+  const generatedResume = resumeVersions[selectedResumeMethod];
+  const isAnyGenerating = generatingJobId !== null;
+  const isSelectedResumeGenerating =
+    selectedJob?.id === generatingJobId &&
+    selectedResumeMethod === generatingResumeMethod;
+
+  const setResumeVersion = (generationMethod, resume) => {
+    setResumeVersions((currentVersions) => ({
+      ...currentVersions,
+      [generationMethod]: resume,
+    }));
+  };
 
   const handleGenerateResume = async (jobId) => {
     const confirmed = window.confirm(
@@ -171,6 +190,8 @@ function App() {
       setResumePanelMessage("");
       setResumeLoading(true);
       setGeneratingJobId(jobId);
+      setGeneratingResumeMethod(RESUME_METHOD_NORMAL);
+      setSelectedResumeMethod(RESUME_METHOD_NORMAL);
 
       await api.post(`/api/resume/generate-async/${jobId}`);
 
@@ -182,13 +203,14 @@ function App() {
       if (backendMessage === "Resume is already up to date.") {
         showToast(backendMessage, "danger");
         setResumePanelMessage(backendMessage);
-        fetchResumeForJob(jobId, true);
+        fetchResumeForJob(jobId, true, RESUME_METHOD_NORMAL);
       } else {
         showErrorToast(backendMessage);
         setResumePanelError(backendMessage);
       }
       setResumeLoading(false);
       setGeneratingJobId(null);
+      setGeneratingResumeMethod(null);
     }
   };
 
@@ -205,17 +227,19 @@ function App() {
       setResumePanelMessage("");
       setResumeLoading(true);
       setGeneratingJobId(jobId);
+      setGeneratingResumeMethod(RESUME_METHOD_RAG);
+      setSelectedResumeMethod(RESUME_METHOD_RAG);
 
       await api.post(`/api/resume/generate-rag/${jobId}`);
 
-      await fetchResumeForJob(jobId);
+      await fetchResumeForJob(jobId, false, RESUME_METHOD_RAG);
       showToast("RAG resume generated successfully.");
     } catch (err) {
       const backendMessage = getApiErrorMessage(err, "Failed to generate RAG resume.");
       if (backendMessage === "Resume is already up to date.") {
         showToast(backendMessage, "danger");
         setResumePanelMessage(backendMessage);
-        fetchResumeForJob(jobId, true);
+        fetchResumeForJob(jobId, true, RESUME_METHOD_RAG);
       } else {
         showErrorToast(backendMessage);
         setResumePanelError(backendMessage);
@@ -223,28 +247,33 @@ function App() {
     } finally {
       setResumeLoading(false);
       setGeneratingJobId(null);
+      setGeneratingResumeMethod(null);
     }
   };
 
   const pollGeneratedResume = (jobId) => {
     const intervalId = setInterval(async () => {
       try {
-        const res = await api.get(`/api/resume/fetch/${jobId}`);
+        const res = await api.get(`/api/resume/fetch/${jobId}`, {
+          params: { generationMethod: RESUME_METHOD_NORMAL },
+        });
 
         if (res.data && res.data.needGenerate === false) {
           clearInterval(intervalId);
-          setGeneratedResume(res.data);
+          setResumeVersion(RESUME_METHOD_NORMAL, res.data);
           setResumeContent(deepClone(res.data.generatedContent));
           setResumeLoading(false);
           setResumePanelError("");
           setResumePanelMessage("");
           setGeneratingJobId(null);
+          setGeneratingResumeMethod(null);
           showToast("Resume generated successfully.");
         }
       } catch (err) {
         if (err.response?.status !== 404) {
           clearInterval(intervalId);
           setGeneratingJobId(null);
+          setGeneratingResumeMethod(null);
           setResumeLoading(false);
           const errorMessage = getApiErrorMessage(err, "Failed to check generated resume.");
           setResumePanelError(errorMessage);
@@ -306,7 +335,10 @@ function App() {
 
   useEffect(() => {
     if (!selectedJob) {
-      setGeneratedResume(null);
+      setResumeVersions({
+        [RESUME_METHOD_NORMAL]: null,
+        [RESUME_METHOD_RAG]: null,
+      });
       setResumeContent(null);
       setResumeLoading(false);
       setResumePanelError("");
@@ -314,10 +346,19 @@ function App() {
       return;
     }
 
-    fetchResumeForJob(selectedJob.id);
-  }, [selectedJob?.id]);
+    fetchResumeForJob(selectedJob.id, false, selectedResumeMethod);
+  }, [selectedJob?.id, selectedResumeMethod]);
 
-  async function fetchResumeForJob(jobId, keepMessage = false) {
+  useEffect(() => {
+    const currentResume = resumeVersions[selectedResumeMethod];
+    setResumeContent(currentResume ? deepClone(currentResume.generatedContent) : null);
+  }, [selectedResumeMethod, resumeVersions]);
+
+  async function fetchResumeForJob(
+    jobId,
+    keepMessage = false,
+    generationMethod = selectedResumeMethod
+  ) {
     try {
       if (!keepMessage) {
         setResumePanelError("");
@@ -325,18 +366,26 @@ function App() {
       }
       setResumeLoading(true);
 
-      const response = await api.get(`/api/resume/fetch/${jobId}`);
+      const response = await api.get(`/api/resume/fetch/${jobId}`, {
+        params: { generationMethod },
+      });
 
       if (response.data) {
-        setGeneratedResume(response.data);
-        setResumeContent(deepClone(response.data.generatedContent));
+        setResumeVersion(generationMethod, response.data);
+        if (generationMethod === selectedResumeMethod) {
+          setResumeContent(deepClone(response.data.generatedContent));
+        }
       } else {
-        setGeneratedResume(null);
-        setResumeContent(null);
+        setResumeVersion(generationMethod, null);
+        if (generationMethod === selectedResumeMethod) {
+          setResumeContent(null);
+        }
       }
     } catch (err) {
-      setGeneratedResume(null);
-      setResumeContent(null);
+      setResumeVersion(generationMethod, null);
+      if (generationMethod === selectedResumeMethod) {
+        setResumeContent(null);
+      }
 
       if (err.response?.status !== 404) {
         setResumePanelError(getApiErrorMessage(err, "Failed to fetch generated resume."));
@@ -356,7 +405,7 @@ function App() {
         generatedContent: JSON.stringify(resumeContent),
       });
 
-      setGeneratedResume({
+      setResumeVersion(selectedResumeMethod, {
         ...generatedResume,
         generatedContent: deepClone(resumeContent),
       });
@@ -1241,19 +1290,17 @@ function App() {
                       type="button"
                       className="primary-button generate-heading-button"
                       onClick={() => handleGenerateResume(selectedJob.id)}
-                      disabled={generatingJobId === selectedJob.id}
+                      disabled={isAnyGenerating}
                     >
-                      {generatingJobId === selectedJob.id
-                        ? "Generating..."
-                        : "Generate Resume"}
+                      {isAnyGenerating ? "Generating..." : "Generate Resume"}
                     </button>
                     <button
                       type="button"
                       className="secondary-button generate-heading-button"
                       onClick={() => handleGenerateResumeWithRag(selectedJob.id)}
-                      disabled={generatingJobId === selectedJob.id}
+                      disabled={isAnyGenerating}
                     >
-                      Generate with RAG
+                      {isAnyGenerating ? "Generating..." : "Generate with RAG"}
                     </button>
                   </div>
                 </div>
@@ -1392,7 +1439,10 @@ function App() {
             selectedJob={selectedJob}
             generatedResume={generatedResume}
             resumeContent={resumeContent}
+            selectedResumeMethod={selectedResumeMethod}
+            onResumeMethodChange={setSelectedResumeMethod}
             resumeLoading={resumeLoading}
+            resumeGenerating={isSelectedResumeGenerating}
             resumePanelError={resumePanelError}
             resumePanelMessage={resumePanelMessage}
             onSaveResume={saveResumeContent}
@@ -2224,4 +2274,5 @@ function downloadSkillCsvTemplate() {
 }
 
 export default App;
+
 

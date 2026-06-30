@@ -97,28 +97,40 @@ public class ResumeService {
         resume.setJobId(request.getJobId());
         resume.setMatchScore(request.getMatchScore());
         resume.setGeneratedContent(request.getGeneratedContent());
+        resume.setGenerationMethod(ResumeGenerationMethod.NORMAL);
 
         resumeMapper.insert(resume);
         return resume;
     }
 
     public ResumeResponseDTO fetchResumesByJobId(Long jobId) {
+        return fetchResumesByJobId(jobId, null);
+    }
+
+    public ResumeResponseDTO fetchResumesByJobId(Long jobId, ResumeGenerationMethod generationMethod) {
         Job job = jobMapper.findById(jobId);
         if (job == null) {
             throw new ResourceNotFoundException("Job not found");
         }
 
-        Resume resume = resumeMapper.findByJobId(jobId);
+        Resume resume = generationMethod == null
+                ? resumeMapper.findByJobId(jobId)
+                : resumeMapper.findByJobIdAndGenerationMethod(jobId, generationMethod);
         if (resume == null) {
             return null;
         }
 
+        return toResponseDTO(resume);
+    }
+
+    private ResumeResponseDTO toResponseDTO(Resume resume) {
         ResumeResponseDTO dto = new ResumeResponseDTO();
 
         dto.setId(resume.getId());
         dto.setJobId(resume.getJobId());
         dto.setMatchScore(resume.getMatchScore());
         dto.setNeedGenerate(resume.getNeedGenerate());
+        dto.setGenerationMethod(resume.getGenerationMethod());
         dto.setCreatedAt(resume.getCreatedAt());
         dto.setUpdatedAt(resume.getUpdatedAt());
         try {
@@ -191,6 +203,7 @@ public class ResumeService {
         resume.setJobId(jobId);
         resume.setMatchScore(null);
         resume.setNeedGenerate(false);
+        resume.setGenerationMethod(ResumeGenerationMethod.NORMAL);
 
         String json;
         try {
@@ -201,7 +214,10 @@ public class ResumeService {
             throw new BadRequestException("AI returned invalid resume JSON");
         }
 
-        Resume existingResume = resumeMapper.findByJobId(jobId);
+        Resume existingResume = resumeMapper.findByJobIdAndGenerationMethod(
+                jobId,
+                ResumeGenerationMethod.NORMAL
+        );
 
         if (existingResume == null) {
             resumeMapper.insert(resume);
@@ -219,7 +235,7 @@ public class ResumeService {
             throw new ResourceNotFoundException("Job not found");
         }
 
-        ensureGenerationAllowed(jobId);
+        ensureGenerationAllowed(jobId, ResumeGenerationMethod.RAG);
 
         Long userId = job.getUserId();
         if (userId == null) {
@@ -264,6 +280,7 @@ public class ResumeService {
         resume.setJobId(jobId);
         resume.setMatchScore(null);
         resume.setNeedGenerate(false);
+        resume.setGenerationMethod(ResumeGenerationMethod.RAG);
 
         String json;
         try {
@@ -274,7 +291,10 @@ public class ResumeService {
             throw new BadRequestException("AI returned invalid resume JSON");
         }
 
-        Resume existingResume = resumeMapper.findByJobId(jobId);
+        Resume existingResume = resumeMapper.findByJobIdAndGenerationMethod(
+                jobId,
+                ResumeGenerationMethod.RAG
+        );
 
         if (existingResume == null) {
             resumeMapper.insert(resume);
@@ -287,19 +307,27 @@ public class ResumeService {
     }
 
     public void ensureGenerationAllowed(Long jobId) {
+        ensureGenerationAllowed(jobId, ResumeGenerationMethod.NORMAL);
+    }
+
+    public void ensureGenerationAllowed(Long jobId, ResumeGenerationMethod generationMethod) {
         Job job = jobMapper.findById(jobId);
         if (job == null) {
             throw new ResourceNotFoundException("Job not found");
         }
 
-        Resume existingResume = resumeMapper.findByJobId(jobId);
+        Resume existingResume = resumeMapper.findByJobIdAndGenerationMethod(jobId, generationMethod);
         if (existingResume != null && !Boolean.TRUE.equals(existingResume.getNeedGenerate())) {
             throw new BadRequestException("Resume is already up to date.");
         }
     }
 
     public void markExistingResumeDirtyForGeneration(Long jobId) {
-        resumeMapper.markResumeDirtyByJobId(jobId);
+        markExistingResumeDirtyForGeneration(jobId, ResumeGenerationMethod.NORMAL);
+    }
+
+    public void markExistingResumeDirtyForGeneration(Long jobId, ResumeGenerationMethod generationMethod) {
+        resumeMapper.markResumeDirtyByJobIdAndGenerationMethod(jobId, generationMethod);
     }
 
     private String callLlmWithRetry(String prompt) {
