@@ -119,4 +119,82 @@ public interface ProfileEmbeddingChunkMapper {
         </script>
         """)
     int updateById(ProfileEmbeddingChunk chunk);
+
+    @Select("""
+        SELECT
+            id,
+            user_id,
+            source_type,
+            source_id,
+            content_text,
+            embedding <=> #{queryEmbedding, typeHandler=com.mingzhe.resumetailor.rag.PgVectorTypeHandler} AS distance
+        FROM profile_embedding_chunks
+        WHERE user_id = #{userId}
+          AND embedding_status = CAST('READY' AS embedding_status)
+          AND embedding IS NOT NULL
+        ORDER BY embedding <=> #{queryEmbedding, typeHandler=com.mingzhe.resumetailor.rag.PgVectorTypeHandler}
+        LIMIT #{topK}
+        """)
+    @Results(id = "RetrievedChunkResultMap", value = {
+            @Result(column = "id", property = "id"),
+            @Result(column = "user_id", property = "userId"),
+            @Result(column = "source_type", property = "sourceType"),
+            @Result(column = "source_id", property = "sourceId"),
+            @Result(column = "content_text", property = "contentText"),
+            @Result(column = "distance", property = "distance")
+    })
+    List<RetrievedChunkDTO> findTopKReadyChunksByEmbedding(
+            @Param("userId") Long userId,
+            @Param("queryEmbedding") float[] queryEmbedding,
+            @Param("topK") int topK
+    );
+
+    @Select("""
+        SELECT
+            id,
+            user_id,
+            source_type,
+            source_id,
+            content_text,
+            embedding <=> #{queryEmbedding, typeHandler=com.mingzhe.resumetailor.rag.PgVectorTypeHandler} AS distance
+        FROM profile_embedding_chunks
+        WHERE user_id = #{userId}
+          AND source_type = CAST('SKILL' AS public."embedding_source_type")
+          AND embedding_status = CAST('READY' AS public."embedding_status")
+          AND embedding IS NOT NULL
+        ORDER BY embedding <=> #{queryEmbedding, typeHandler=com.mingzhe.resumetailor.rag.PgVectorTypeHandler}
+        LIMIT #{topK}
+        """)
+    @ResultMap("RetrievedChunkResultMap")
+    List<RetrievedChunkDTO> findTopKReadySkillChunksByEmbedding(
+            @Param("userId") Long userId,
+            @Param("queryEmbedding") float[] queryEmbedding,
+            @Param("topK") int topK
+    );
+
+    @Select("""
+        SELECT
+            id,
+            user_id,
+            source_type,
+            source_id,
+            content_text,
+            embedding <=> #{queryEmbedding, typeHandler=com.mingzhe.resumetailor.rag.PgVectorTypeHandler} AS distance
+        FROM profile_embedding_chunks
+        WHERE user_id = #{userId}
+          AND source_type IN (
+              CAST('EXPERIENCE' AS public."embedding_source_type"),
+              CAST('PROJECT' AS public."embedding_source_type")
+          )
+          AND embedding_status = CAST('READY' AS public."embedding_status")
+          AND embedding IS NOT NULL
+        ORDER BY embedding <=> #{queryEmbedding, typeHandler=com.mingzhe.resumetailor.rag.PgVectorTypeHandler}
+        LIMIT #{topK}
+        """)
+    @ResultMap("RetrievedChunkResultMap")
+    List<RetrievedChunkDTO> findTopKReadyExperienceAndProjectChunksByEmbedding(
+            @Param("userId") Long userId,
+            @Param("queryEmbedding") float[] queryEmbedding,
+            @Param("topK") int topK
+    );
 }
