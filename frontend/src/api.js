@@ -57,4 +57,8 @@ export function resetPromptTemplate(type) {
   });
 }
 
+export function getSkillKeywords() {
+  return api.get("/api/skill-keywords");
+}
+
 export default api;

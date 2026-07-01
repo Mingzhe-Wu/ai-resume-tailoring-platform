@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getSkillKeywords } from "../../api.js";
 import EditableResumePreview from "./EditableResumePreview.jsx";
 import ResumeBuilderToolbar from "./ResumeBuilderToolbar.jsx";
 import {
@@ -24,14 +25,48 @@ export default function ResumePreviewPanel({
   resumePreviewRef,
 }) {
   const [resumeOutOfBoundary, setResumeOutOfBoundary] = useState(false);
+  const [skillKeywords, setSkillKeywords] = useState([]);
+  const [keywordHintsLoading, setKeywordHintsLoading] = useState(false);
+  const [keywordHintsError, setKeywordHintsError] = useState("");
   const selectedMethodLabel = selectedResumeMethod === "RAG" ? "RAG" : "Normal";
-  const keywordHints = getKeywordHints(selectedJob?.jobDescription, resumeContent);
+  const keywordHints = getKeywordHints(selectedJob?.jobDescription, resumeContent, skillKeywords);
   const coveredKeywordGroups = groupKeywordHintsByCategory(
     keywordHints.filter((hint) => hint.covered)
   );
   const missingKeywordGroups = groupKeywordHintsByCategory(
     keywordHints.filter((hint) => !hint.covered)
   );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchSkillKeywords() {
+      try {
+        setKeywordHintsLoading(true);
+        setKeywordHintsError("");
+
+        const response = await getSkillKeywords();
+        if (isMounted) {
+          setSkillKeywords(response.data || []);
+        }
+      } catch {
+        if (isMounted) {
+          setSkillKeywords([]);
+          setKeywordHintsError("Keyword hints are unavailable right now.");
+        }
+      } finally {
+        if (isMounted) {
+          setKeywordHintsLoading(false);
+        }
+      }
+    }
+
+    fetchSkillKeywords();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedJob) {
@@ -138,6 +173,8 @@ export default function ResumePreviewPanel({
               keywordHints={keywordHints}
               coveredKeywordGroups={coveredKeywordGroups}
               missingKeywordGroups={missingKeywordGroups}
+              loading={keywordHintsLoading}
+              error={keywordHintsError}
             />
 
             <ResumeBuilderToolbar
@@ -175,6 +212,8 @@ function KeywordHintsPanel({
   keywordHints,
   coveredKeywordGroups,
   missingKeywordGroups,
+  loading,
+  error,
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const hasHints = keywordHints.length > 0;
@@ -204,7 +243,11 @@ function KeywordHintsPanel({
             Simple keyword hints only. Use them as a manual review checklist.
           </p>
 
-          {!hasHints ? (
+          {loading ? (
+            <p className="keyword-hints-empty">Loading keyword hints...</p>
+          ) : error ? (
+            <p className="keyword-hints-empty">{error}</p>
+          ) : !hasHints ? (
             <p className="keyword-hints-empty">No tracked JD keywords detected yet.</p>
           ) : (
             <>
