@@ -35,4 +35,26 @@ export function getApiErrorMessage(error, fallback = "Request failed") {
   return fallback;
 }
 
+export function getEffectivePromptTemplate(type) {
+  return api.get("/api/prompt-templates/effective", {
+    params: { type },
+  });
+}
+
+export function savePromptTemplate(type, content) {
+  return api.put(
+    "/api/prompt-templates",
+    { content },
+    {
+      params: { type },
+    }
+  );
+}
+
+export function resetPromptTemplate(type) {
+  return api.delete("/api/prompt-templates", {
+    params: { type },
+  });
+}
+
 export default api;

@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import api, { getApiErrorMessage } from "./api";
+import api, {
+  getApiErrorMessage,
+  getEffectivePromptTemplate,
+  resetPromptTemplate,
+  savePromptTemplate,
+} from "./api";
 import ResumePreviewPanel from "./components/resume/ResumePreviewPanel.jsx";
 import { exportResumeElementToPdf } from "./components/resume/resumePdfExport.js";
 import {
@@ -13,6 +18,10 @@ const TOAST_DISPLAY_MS = 3000;
 const TOAST_EXIT_MS = 140;
 const RESUME_METHOD_NORMAL = "NORMAL";
 const RESUME_METHOD_RAG = "RAG";
+const PROMPT_TYPES = [
+  { value: "NORMAL", label: "Normal" },
+  { value: "RAG", label: "RAG" },
+];
 
 function ResumeGenerationHelp({ className = "" }) {
   return (
@@ -118,6 +127,14 @@ function App() {
   const [jobs, setJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
   const [showJobModal, setShowJobModal] = useState(false);
+  const [showPromptSettingsModal, setShowPromptSettingsModal] = useState(false);
+  const [promptType, setPromptType] = useState("NORMAL");
+  const [promptTemplate, setPromptTemplate] = useState(null);
+  const [promptContent, setPromptContent] = useState("");
+  const [promptLoading, setPromptLoading] = useState(false);
+  const [promptSaving, setPromptSaving] = useState(false);
+  const [promptResetting, setPromptResetting] = useState(false);
+  const [promptError, setPromptError] = useState("");
   const [jobError, setJobError] = useState("");
   const [jobSearchKeyword, setJobSearchKeyword] = useState("");
   const [jobStatusFilter, setJobStatusFilter] = useState("");
@@ -370,6 +387,12 @@ function App() {
   }, [selectedJob?.id, selectedResumeMethod]);
 
   useEffect(() => {
+    if (showPromptSettingsModal) {
+      fetchPromptTemplate(promptType);
+    }
+  }, [showPromptSettingsModal, promptType]);
+
+  useEffect(() => {
     const currentResume = resumeVersions[selectedResumeMethod];
     setResumeContent(currentResume ? deepClone(currentResume.generatedContent) : null);
   }, [selectedResumeMethod, resumeVersions]);
@@ -541,6 +564,99 @@ function App() {
 
   function showErrorToast(text) {
     showToast(text, "danger");
+  }
+
+  async function fetchPromptTemplate(type = promptType) {
+    try {
+      setPromptError("");
+      setPromptLoading(true);
+
+      const response = await getEffectivePromptTemplate(type);
+      setPromptTemplate(response.data);
+      setPromptContent(response.data?.content || "");
+    } catch (err) {
+      const errorMessage = getApiErrorMessage(err, "Failed to fetch prompt template.");
+      setPromptError(errorMessage);
+      showErrorToast(errorMessage);
+    } finally {
+      setPromptLoading(false);
+    }
+  }
+
+  function openPromptSettingsModal() {
+    setPromptType("NORMAL");
+    setPromptTemplate(null);
+    setPromptContent("");
+    setPromptError("");
+    setShowPromptSettingsModal(true);
+  }
+
+  function getPromptWarning(type) {
+    if (type === "RAG") {
+      return {
+        description:
+          "RAG prompts use retrieved resume evidence. Keep the required placeholders so the backend can inject the job, role focus, and retrieved context.",
+        placeholders: ["{{roleFocus}}", "{{targetJob}}", "{{resumeContext}}"],
+      };
+    }
+
+    return {
+      description:
+        "Normal prompts use your full profile. Keep the required placeholders so the backend can inject all profile sections before generation.",
+      placeholders: [
+        "{{roleFocus}}",
+        "{{targetJob}}",
+        "{{candidateProfile}}",
+        "{{experiences}}",
+        "{{educations}}",
+        "{{projects}}",
+        "{{skills}}",
+      ],
+    };
+  }
+
+  const promptWarning = getPromptWarning(promptType);
+
+  async function savePromptSettings() {
+    if (!promptContent.trim()) return;
+
+    try {
+      setPromptError("");
+      setPromptSaving(true);
+
+      const response = await savePromptTemplate(promptType, promptContent);
+      setPromptTemplate(response.data);
+      setPromptContent(response.data?.content || promptContent);
+      showToast("Prompt template saved.");
+    } catch (err) {
+      const errorMessage = getApiErrorMessage(err, "Failed to save prompt template.");
+      setPromptError(errorMessage);
+      showErrorToast(errorMessage);
+    } finally {
+      setPromptSaving(false);
+    }
+  }
+
+  async function resetPromptSettings() {
+    const confirmed = window.confirm(
+      `Reset ${promptType} prompt to the default template? Your custom prompt for this mode will be deleted.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setPromptError("");
+      setPromptResetting(true);
+
+      await resetPromptTemplate(promptType);
+      await fetchPromptTemplate(promptType);
+      showToast("Prompt reset to default.");
+    } catch (err) {
+      const errorMessage = getApiErrorMessage(err, "Failed to reset prompt template.");
+      setPromptError(errorMessage);
+      showErrorToast(errorMessage);
+    } finally {
+      setPromptResetting(false);
+    }
   }
 
   function fillSelectedJobForm(job) {
@@ -1197,6 +1313,7 @@ function App() {
     setProfile(null);
     setShowProfileModal(false);
     setShowJobModal(false);
+    setShowPromptSettingsModal(false);
     setShowSectionAddModal(false);
     setJobs([]);
     setSelectedJob(null);
@@ -1217,6 +1334,10 @@ function App() {
         </div>
 
         <div className="top-right">
+          <button className="email-button" onClick={openPromptSettingsModal}>
+            Prompt Settings
+          </button>
+
           <button className="email-button" onClick={openProfileModal}>
             Your Profile
           </button>
@@ -1698,6 +1819,87 @@ function App() {
 />
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showPromptSettingsModal && (
+          <div className="modal-overlay">
+            <div className="profile-modal prompt-settings-modal">
+              <button
+                className="close-button"
+                onClick={() => setShowPromptSettingsModal(false)}
+              >
+                &times;
+              </button>
+
+              <h2>Prompt Settings</h2>
+
+              <div className="prompt-type-row">
+                {PROMPT_TYPES.map((type) => (
+                  <button
+                    key={type.value}
+                    type="button"
+                    className={promptType === type.value ? "tab active" : "tab"}
+                    onClick={() => setPromptType(type.value)}
+                  >
+                    {type.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="prompt-warning">
+                <p>
+                  Editing prompts gives you more control over resume generation, but poorly formatted prompts may reduce output quality or cause invalid resume JSON.
+                </p>
+                <p>{promptWarning.description}</p>
+                <div className="prompt-placeholder-list" aria-label="Required prompt placeholders">
+                  <span>Required placeholders:</span>
+                  {promptWarning.placeholders.map((placeholder) => (
+                    <code key={placeholder}>{placeholder}</code>
+                  ))}
+                </div>
+              </div>
+
+              {promptTemplate && (
+                <p className="prompt-status">
+                  {promptTemplate.isDefault || promptTemplate.userId == null
+                    ? "Using default prompt"
+                    : "Using your custom prompt"}
+                </p>
+              )}
+
+              {promptError && <p className="error-text">{promptError}</p>}
+
+              {promptLoading ? (
+                <p className="empty-text">Loading prompt...</p>
+              ) : (
+                <textarea
+                  className="prompt-template-textarea"
+                  value={promptContent}
+                  onChange={(e) => setPromptContent(e.target.value)}
+                />
+              )}
+
+              <div className="modal-action-row">
+                <button
+                  className="primary-button"
+                  disabled={promptSaving || promptResetting || promptLoading || !promptContent.trim()}
+                  onClick={savePromptSettings}
+                >
+                  {promptSaving ? "Saving..." : "Save Prompt"}
+                </button>
+              </div>
+
+              <div className="prompt-reset-row">
+                <button
+                  className="secondary-button danger-button"
+                  disabled={promptSaving || promptResetting || promptLoading || promptTemplate?.isDefault || promptTemplate?.userId == null}
+                  onClick={resetPromptSettings}
+                >
+                  {promptResetting ? "Resetting..." : "Reset to Default"}
+                </button>
               </div>
             </div>
           </div>

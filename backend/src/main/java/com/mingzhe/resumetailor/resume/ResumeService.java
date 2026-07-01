@@ -15,6 +15,8 @@ import com.mingzhe.resumetailor.openai.ChunkEmbeddingService;
 import com.mingzhe.resumetailor.openai.OpenAiResumeService;
 import com.mingzhe.resumetailor.profile.Profile;
 import com.mingzhe.resumetailor.profile.ProfileMapper;
+import com.mingzhe.resumetailor.prompttemplate.PromptTemplateService;
+import com.mingzhe.resumetailor.prompttemplate.PromptTemplateType;
 import com.mingzhe.resumetailor.project.Project;
 import com.mingzhe.resumetailor.project.ProjectMapper;
 import com.mingzhe.resumetailor.rag.ProfileEmbeddingChunkService;
@@ -50,6 +52,7 @@ public class ResumeService {
     private final ProfileEmbeddingChunkService profileEmbeddingChunkService;
     private final SemanticRetrievalService semanticRetrievalService;
     private final ResumeContextBuilderService resumeContextBuilderService;
+    private final PromptTemplateService promptTemplateService;
 
     private static final Logger log = LoggerFactory.getLogger(ResumeService.class);
 
@@ -69,7 +72,8 @@ public class ResumeService {
             ChunkEmbeddingService chunkEmbeddingService,
             ProfileEmbeddingChunkService profileEmbeddingChunkService,
             SemanticRetrievalService semanticRetrievalService,
-            ResumeContextBuilderService resumeContextBuilderService
+            ResumeContextBuilderService resumeContextBuilderService,
+            PromptTemplateService promptTemplateService
     ) {
         this.jobMapper = jobMapper;
         this.profileMapper = profileMapper;
@@ -84,6 +88,7 @@ public class ResumeService {
         this.profileEmbeddingChunkService = profileEmbeddingChunkService;
         this.semanticRetrievalService = semanticRetrievalService;
         this.resumeContextBuilderService = resumeContextBuilderService;
+        this.promptTemplateService = promptTemplateService;
     }
 
     public Resume createResume(CreateResumeDTO request) {
@@ -391,115 +396,46 @@ public class ResumeService {
     }
 
     private String buildPrompt(ResumeGenerationContext context) {
+        if (context == null) {
+            throw new IllegalArgumentException("Resume generation context is null");
+        }
 
-        Job job = context.getJob();
-        Profile profile = context.getProfile();
-        List<Experience> experiences = context.getExperiences();
-        List<Education> educations = context.getEducations();
-        List<Project> projects = context.getProjects();
-        List<Skill> skills = context.getSkills();
+        Long userId = context.getJob() == null ? null : context.getJob().getUserId();
+        String template = promptTemplateService.getEffectivePromptContent(userId, PromptTemplateType.NORMAL);
+
+        return template
+                .replace("{{roleFocus}}", buildRoleFocus(context.getJob()))
+                .replace("{{targetJob}}", buildTargetJob(context.getJob()))
+                .replace("{{candidateProfile}}", buildCandidateProfile(context.getProfile()))
+                .replace("{{experiences}}", buildExperiences(context.getExperiences()))
+                .replace("{{educations}}", buildEducations(context.getEducations()))
+                .replace("{{projects}}", buildProjects(context.getProjects()))
+                .replace("{{skills}}", buildSkills(context.getSkills()));
+    }
+
+    public String buildRagPrompt(Job job, String resumeContext) {
+        if (job == null) {
+            throw new IllegalArgumentException("Job cannot be null.");
+        }
+
+        if (!hasText(resumeContext)) {
+            throw new IllegalArgumentException("Resume context cannot be blank.");
+        }
+
+        String template = promptTemplateService.getEffectivePromptContent(job.getUserId(), PromptTemplateType.RAG);
+
+        return template
+                .replace("{{roleFocus}}", buildRoleFocus(job))
+                .replace("{{targetJob}}", buildTargetJob(job))
+                .replace("{{resumeContext}}", resumeContext);
+    }
+
+    private String buildRoleFocus(Job job) {
+        if (job == null) {
+            return "";
+        }
 
         StringBuilder sb = new StringBuilder();
-
-// =========================================================================
-// Core Identity & Output Contract
-// =========================================================================
-
-        sb.append("""
-                You are a senior software engineering resume writer.
-                
-                Generate a concise, ATS-friendly, technically credible software engineering resume tailored to the target job description and candidate background.
-                
-                The resume should feel realistic, polished, and intentionally curated for the target role while remaining believable for a strong new graduate software engineering candidate.
-                
-                Output only valid JSON that strictly follows the required schema.
-                Do not output Markdown, explanations, comments, or plain resume text.
-                
-                """);
-
-// =========================================================================
-// Resume Generation Policy
-// =========================================================================
-
-        sb.append("""
-                Resume Generation Policy:
-                
-                Realism & Anti-Hallucination:
-                - Resume realism is more important than maximizing keyword matching.
-                - Do not invent entirely new projects, engineering domains, technologies, or work experiences.
-                - Only strengthen, reorganize, compress, expand, or rewrite experiences explicitly supported by the provided candidate data.
-                - Avoid synthesizing large technical narratives from isolated skills, coursework, or weak signals.
-                - Prefer omission over exaggeration.
-                - Avoid inflated or unrealistic engineering claims.
-                - Ground technical claims in concrete implementation details.
-                - Resume content should sound believable to experienced software engineers conducting technical interviews.
-                
-                Writing Style:
-                - Write concise, technically dense, engineering-oriented bullet points.
-                - Keep most bullets around 20-35 words.
-                - Use strong action verbs such as Developed, Built, Designed, Implemented, Automated, Integrated, Diagnosed, Refined, and Debugged.
-                - Use past tense for completed work.
-                - Prefer implementation details, debugging, workflows, APIs, persistence, automation, testing, integration, and operational behavior over abstract business summaries.
-                - Avoid weak phrases such as Responsible for, Worked on, Helped with, Assisted with, or Participated in.
-                - Avoid overly repetitive bullet structures.
-                - Avoid excessive buzzwords or keyword stuffing.
-                - Avoid mechanically stacking too many technologies into a single bullet.
-                - Prefer natural engineering language commonly used in real production environments.
-                
-                Prioritization:
-                - Prioritize the most role-relevant experiences, projects, and skills.
-                - Allocate more space to highly relevant engineering work.
-                - Compress low-relevance content aggressively.
-                - Reorder experiences, projects, and skills based on the target role.
-                - AI-related claims should remain implementation-focused rather than research-focused unless explicitly supported.
-                - Prefer concise, information-dense writing over verbose descriptions.
-                - Avoid repeating the same technologies or accomplishments across multiple sections.
-                
-                Length Optimization:
-                - Optimize the resume for a one-page software engineering resume.
-                - Allocate space dynamically based on relevance to the target role.
-                - Keep the overall content concise rather than maximizing every section.
-                - Prioritize preserving the strongest evidence of engineering ability over fitting every piece of information.
-                - Compress lower-priority descriptions before removing high-impact technical accomplishments.
-                - Prefer fewer, stronger, information-dense sentences over many repetitive bullet points.
-                - Prefer less than 450 words for the entire resume.
-                
-                Bullet Allocation:
-                - Allocate bullet points dynamically based on relevance and available space.
-                - The entire resume should contain the most relevant bullet points only, preferrably around 10-12 bullet points, less is fine, but no more than 12.
-                - Highly relevant experiences or projects may receive additional bullet points only if lower-priority sections are compressed accordingly.
-                - Prefer merging related accomplishments into a single stronger bullet rather than creating many short bullets.
-                - Avoid excessive bullet lists for any single experience or project.
-                
-                Summary:
-                - The summary is optional.
-                - If experience and projects require more space, compress the summary to 1-2 lines.
-                - If there is sufficient space, the summary may be expanded, but should never exceed 3 lines.
-                
-                Experience & Projects:
-                - Preserve enough bullet points to clearly communicate the candidate's strongest technical achievements.
-                - Do not arbitrarily reduce bullet points.
-                - Compress or merge redundant information instead.
-                - Preserve the most impactful technical accomplishments whenever possible.
-                
-                Skills:
-                - Keep the Skills section concise, curated, and relevant.
-                - Do not treat the Skills section as a complete inventory.
-                - Instead, highlight the technologies most relevant to the target job description.
-                - Curate the skills section instead of listing every available skill.
-                - Include at most 5 skill categories.
-                - Include approximately 20 of the most relevant technical skills, preferring the most desired from job description.
-                - Remove outdated, redundant, or low-value skills.
-                - Prefer quality over quantity.
-                - Skill category names do not need to follow any predefined list.
-                - Generate meaningful skill categories that best organize the selected skills for the target role.
-                
-                """);
-
-// =========================================================================
-// Dynamic Role Focus
-// =========================================================================
-
         String jdText = (
                 (job.getTitle() == null ? "" : job.getTitle()) + " " +
                         (job.getJobDescription() == null ? "" : job.getJobDescription())
@@ -558,122 +494,15 @@ public class ResumeService {
                     """);
         }
 
-// =========================================================================
-// Required JSON Schema
-// =========================================================================
+        return sb.toString();
+    }
 
-        sb.append("""
-                Required JSON Output Schema:
-                
-                {
-                  "template": "ATS",
-                  "contact": {
-                    "name": "",
-                    "location": "",
-                    "email": "",
-                    "phone": "",
-                    "linkedin": "",
-                    "github": ""
-                  },
-                  "summary": {
-                    "visible": true,
-                    "content": ""
-                  },
-                  "sections": [
-                    {
-                      "id": "education",
-                      "type": "education",
-                      "title": "Education",
-                      "visible": true,
-                      "order": 1,
-                      "items": [
-                        {
-                          "school": "",
-                          "degree": "",
-                          "major": "",
-                          "location": "",
-                          "startDate": "",
-                          "endDate": "",
-                          "gpa": "",
-                          "details": []
-                        }
-                      ]
-                    },
-                    {
-                      "id": "experience",
-                      "type": "experience",
-                      "title": "Experience",
-                      "visible": true,
-                      "order": 2,
-                      "items": [
-                        {
-                          "company": "",
-                          "title": "",
-                          "location": "",
-                          "startDate": "",
-                          "endDate": "",
-                          "visible": true,
-                          "bullets": []
-                        }
-                      ]
-                    },
-                    {
-                      "id": "projects",
-                      "type": "projects",
-                      "title": "Projects",
-                      "visible": true,
-                      "order": 3,
-                      "items": [
-                        {
-                          "name": "",
-                          "techStack": [],
-                          "startDate": "",
-                          "endDate": "",
-                          "visible": true,
-                          "bullets": []
-                        }
-                      ]
-                    },
-                    {
-                      "id": "skills",
-                      "type": "skills",
-                      "title": "Skills",
-                      "visible": true,
-                      "order": 4,
-                      "items": [
-                        {
-                          "category": "",
-                          "skills": []
-                        }
-                      ]
-                    }
-                  ]
-                }
-                
-                JSON Rules:
-                - Return exactly one JSON object.
-                - Do not wrap the JSON in Markdown code fences.
-                - Do not include any text before or after the JSON.
-                - Use double quotes for all JSON keys and string values.
-                - Use arrays for bullets, details, skills, techStack, sections, and items.
-                - Exclude null or empty fields when possible.
-                - Do not include trailing commas.
-                - Do not include null values.
-                - Do not include empty strings if the field is unavailable.
-                - If a section has no usable content, omit that section.
-                - Section order should reflect the best resume layout for the target job.
-                - Each section and item should include "visible": true.
-                - Keep "template" as "ATS".
-                - The renderer will determine visual formatting.
-                - Focus on producing semantically correct resume content rather than presentation.
-                - The JSON must be directly parseable by Jackson ObjectMapper.
-                
-                """);
+    private String buildTargetJob(Job job) {
+        if (job == null) {
+            return "";
+        }
 
-// =========================================================================
-// Target Job
-// =========================================================================
-
+        StringBuilder sb = new StringBuilder();
         sb.append("<TargetJob>\\n");
 
         appendIfPresent(sb, "Title: ", job.getTitle());
@@ -686,11 +515,15 @@ public class ResumeService {
         }
 
         sb.append("</TargetJob>\\n\\n");
+        return sb.toString();
+    }
 
-// =========================================================================
-// Candidate Profile
-// =========================================================================
+    private String buildCandidateProfile(Profile profile) {
+        if (profile == null) {
+            return "";
+        }
 
+        StringBuilder sb = new StringBuilder();
         sb.append("<CandidateProfile>\\n");
 
         appendIfPresent(sb, "Full Name: ", profile.getFullName());
@@ -701,421 +534,101 @@ public class ResumeService {
         appendIfPresent(sb, "GitHub: ", profile.getGithubUrl());
 
         sb.append("</CandidateProfile>\\n\\n");
-
-// =========================================================================
-// Experiences
-// =========================================================================
-
-        if (experiences != null && !experiences.isEmpty()) {
-
-            sb.append("<Experiences>\\n");
-
-            for (Experience exp : experiences) {
-
-                sb.append("- Experience\\n");
-
-                appendIfPresent(sb, "  Company: ", exp.getCompanyName());
-                appendIfPresent(sb, "  Position: ", exp.getPosition());
-                appendIfPresent(sb, "  Location: ", exp.getLocation());
-                appendIfPresent(sb, "  Start Date: ", exp.getStartDate());
-                appendIfPresent(sb, "  End Date: ", exp.getEndDate());
-                appendIfPresent(sb, "  Description: ", exp.getDescription());
-
-                sb.append("\\n");
-            }
-
-            sb.append("</Experiences>\\n\\n");
-        }
-
-// =========================================================================
-// Educations
-// =========================================================================
-
-        if (educations != null && !educations.isEmpty()) {
-
-            sb.append("<Educations>\\n");
-
-            for (Education edu : educations) {
-
-                sb.append("- Education\\n");
-
-                appendIfPresent(sb, "  School: ", edu.getSchoolName());
-                appendIfPresent(sb, "  Degree: ", edu.getDegree());
-                appendIfPresent(sb, "  Major: ", edu.getMajor());
-                appendIfPresent(sb, "  GPA: ", edu.getGpa());
-                appendIfPresent(sb, "  Relevant Coursework: ", edu.getRelevantCoursework());
-
-                sb.append("\\n");
-            }
-
-            sb.append("</Educations>\\n\\n");
-        }
-
-// =========================================================================
-// Projects
-// =========================================================================
-
-        if (projects != null && !projects.isEmpty()) {
-
-            sb.append("<Projects>\\n");
-
-            for (Project project : projects) {
-
-                sb.append("- Project\\n");
-
-                appendIfPresent(sb, "  Project Name: ", project.getProjectName());
-                appendIfPresent(sb, "  Tech Stack: ", project.getTechStack());
-                appendIfPresent(sb, "  Start Date: ", project.getStartDate());
-                appendIfPresent(sb, "  End Date: ", project.getEndDate());
-                appendIfPresent(sb, "  Description: ", project.getDescription());
-
-                sb.append("\\n");
-            }
-
-            sb.append("</Projects>\\n\\n");
-        }
-
-// =========================================================================
-// Skills
-// =========================================================================
-
-        if (skills != null && !skills.isEmpty()) {
-
-            sb.append("<Skills>\\n");
-
-            for (Skill skill : skills) {
-
-                if (hasText(skill.getCategory()) && hasText(skill.getName())) {
-
-                    sb.append("- ")
-                            .append(skill.getCategory())
-                            .append(": ")
-                            .append(skill.getName())
-                            .append("\\n");
-                }
-            }
-
-            sb.append("</Skills>\\n\\n");
-        }
-
-// =========================================================================
-// Final Reminder
-// =========================================================================
-
-        sb.append("""
-                Final Reminder:
-                Output only the JSON object.
-                Do not include Markdown, commentary, explanations, or plain resume text.
-                The response must be valid JSON and directly parseable by Jackson ObjectMapper.
-                """);
-
         return sb.toString();
     }
 
-    public String buildRagPrompt(Job job, String resumeContext) {
-        if (job == null) {
-            throw new IllegalArgumentException("Job cannot be null.");
-        }
-
-        if (!hasText(resumeContext)) {
-            throw new IllegalArgumentException("Resume context cannot be blank.");
+    private String buildExperiences(List<Experience> experiences) {
+        if (experiences == null || experiences.isEmpty()) {
+            return "";
         }
 
         StringBuilder sb = new StringBuilder();
+        sb.append("<Experiences>\\n");
 
-// =========================================================================
-// Core Identity & Output Contract
-// =========================================================================
+        for (Experience exp : experiences) {
+            sb.append("- Experience\\n");
 
-        sb.append("""
-                You are a senior software engineering resume writer.
-                
-                Generate a concise, ATS-friendly, technically credible software engineering resume tailored to the target job.
-                
-                The resume should feel realistic, polished, and intentionally curated for the target role while remaining believable for a strong new graduate software engineering candidate.
-                
-                Output only valid JSON that strictly follows the required schema.
-                Do not output Markdown, explanations, comments, or plain resume text.
-                
-                """);
+            appendIfPresent(sb, "  Company: ", exp.getCompanyName());
+            appendIfPresent(sb, "  Position: ", exp.getPosition());
+            appendIfPresent(sb, "  Location: ", exp.getLocation());
+            appendIfPresent(sb, "  Start Date: ", exp.getStartDate());
+            appendIfPresent(sb, "  End Date: ", exp.getEndDate());
+            appendIfPresent(sb, "  Description: ", exp.getDescription());
 
-// =========================================================================
-// RAG Resume Generation Policy
-// =========================================================================
-
-        sb.append("""
-                RAG Resume Generation Policy:
-                
-                Source of Truth:
-                - The Candidate Resume Context is the only source of truth for the candidate's background.
-                - Do not fabricate employers, job titles, dates, education, projects, skills, technologies, metrics, certifications, awards, or experience.
-                - Use the target job description only to decide wording, ordering, emphasis, and skill selection.
-                - Do not introduce new technical claims that are not supported by the Candidate Resume Context.
-                
-                RAG Evidence Usage:
-                - The experience and project bullets in the Candidate Resume Context are the selected RAG evidence set, not a broad raw profile dump.
-                - The retrieval step has already selected the most relevant experience/project evidence for this target job.
-                - In general, include most of the provided experience/project bullets in the final resume.
-                - Do not perform broad re-selection from the provided evidence.
-                - Do not replace provided bullets with newly invented bullets.
-                - Do not create new experience/project bullets that are not traceable to provided bullets.
-                - You may omit a provided experience/project bullet only if it is clearly redundant, very low-value, or impossible to fit concisely.
-                - If length is an issue, shorten bullet wording before removing retrieved evidence.
-                - If omission is necessary, omit the least relevant or most repetitive provided bullet.
-                
-                Bullet Editing:
-                - You may lightly rewrite, shorten, and polish provided bullets for clarity, grammar, concision, and target-role relevance.
-                - Do not split one provided bullet into multiple bullets.
-                - Do not merge multiple provided bullets unless they are nearly duplicate.
-                - Each generated experience/project bullet should correspond to one provided bullet whenever possible.
-                - Do not change the core meaning, scope, technologies, systems, metrics, or accomplishment of a provided bullet.
-                - Preserve concrete numbers, technologies, systems, workflows, domains, and outcomes when they are present and useful.
-                - Keep claims realistic for a strong new graduate software engineering candidate.
-                
-                Writing Style:
-                - Write concise, technically dense, engineering-oriented bullet points.
-                - Keep most bullets around 20-35 words when possible.
-                - Use strong action verbs such as Developed, Built, Designed, Implemented, Automated, Integrated, Diagnosed, Refined, and Debugged.
-                - Use past tense for completed work.
-                - Prefer implementation details, debugging, workflows, APIs, persistence, automation, validation, integration, and operational behavior.
-                - Avoid weak phrases such as Responsible for, Worked on, Helped with, Assisted with, or Participated in.
-                - Avoid excessive buzzwords, keyword stuffing, and mechanically stacking too many technologies into one bullet.
-                
-                Length:
-                - Optimize for a one-page software engineering resume.
-                - Because RAG already selected a compact evidence set, do not aggressively delete retrieved experience/project bullets.
-                - Prefer shortening summary, education details, coursework, skills, and bullet wording before removing retrieved experience/project evidence.
-                - Summary is optional and should be omitted or limited to 1-2 lines if space is needed.
-                - Keep the final resume concise, but preserve the selected technical evidence whenever possible.
-                
-                Skills:
-                - Curate the Skills section based on the target job description.
-                - Skills are retrieved at category level, so they should be filtered more than experience/project bullets.
-                - Do not list every skill from the Candidate Resume Context.
-                - Select only the most relevant skills from the provided skill categories.
-                - Include at most 5 skill categories.
-                - Include approximately 12-18 highly relevant technical skills total.
-                - Remove outdated, redundant, generic, or low-value skills.
-                - You may reorganize skill category names if it improves clarity.
-                - You may move important skills out of a low-value category into a better category.
-                - Do not invent skills not present in the Candidate Resume Context.
-                
-                """);
-
-// =========================================================================
-// Dynamic Role Focus
-// =========================================================================
-
-        String jdText = (
-                (job.getTitle() == null ? "" : job.getTitle()) + " " +
-                        (job.getJobDescription() == null ? "" : job.getJobDescription())
-        ).toLowerCase();
-
-        if (
-                jdText.contains("embedded") ||
-                        jdText.contains("robotics") ||
-                        jdText.contains("autonomous") ||
-                        jdText.contains("linux") ||
-                        jdText.contains("hardware") ||
-                        jdText.contains("sensor") ||
-                        jdText.contains("c++")
-        ) {
-
-            sb.append("""
-                    Detected Role Focus:
-                    This appears to be a systems, embedded, robotics, or low-level engineering role.
-                    Prioritize supported systems-oriented evidence from the Candidate Resume Context, such as C/C++, Linux, debugging, hardware-software integration, sensor processing, networking, and performance work.
-                    Do not invent systems experience if it is not present in the Candidate Resume Context.
-                    
-                    """);
+            sb.append("\\n");
         }
 
-        if (
-                jdText.contains("ai") ||
-                        jdText.contains("llm") ||
-                        jdText.contains("openai") ||
-                        jdText.contains("prompt") ||
-                        jdText.contains("agent") ||
-                        jdText.contains("machine learning")
-        ) {
+        sb.append("</Experiences>\\n\\n");
+        return sb.toString();
+    }
 
-            sb.append("""
-                    Detected Role Focus:
-                    This appears to be an AI application or AI-adjacent software engineering role.
-                    Prioritize supported evidence around API integration, structured workflows, automation, backend orchestration, debugging, prompt construction, persistence workflows, and reliable service behavior.
-                    Avoid overstating ML research, model training, or distributed AI infrastructure unless explicitly present in the Candidate Resume Context.
-                    
-                    """);
+    private String buildEducations(List<Education> educations) {
+        if (educations == null || educations.isEmpty()) {
+            return "";
         }
 
-        if (
-                jdText.contains("backend") ||
-                        jdText.contains("api") ||
-                        jdText.contains("spring") ||
-                        jdText.contains("java") ||
-                        jdText.contains("database")
-        ) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<Educations>\\n");
 
-            sb.append("""
-                    Detected Role Focus:
-                    This appears to be a backend or service-oriented engineering role.
-                    Prioritize supported backend evidence from the Candidate Resume Context, such as Java, Spring Boot, REST APIs, MyBatis, validation, persistence, debugging, operational workflows, and service logic.
-                    
-                    """);
+        for (Education edu : educations) {
+            sb.append("- Education\\n");
+
+            appendIfPresent(sb, "  School: ", edu.getSchoolName());
+            appendIfPresent(sb, "  Degree: ", edu.getDegree());
+            appendIfPresent(sb, "  Major: ", edu.getMajor());
+            appendIfPresent(sb, "  GPA: ", edu.getGpa());
+            appendIfPresent(sb, "  Relevant Coursework: ", edu.getRelevantCoursework());
+
+            sb.append("\\n");
         }
 
-// =========================================================================
-// Required JSON Schema
-// =========================================================================
+        sb.append("</Educations>\\n\\n");
+        return sb.toString();
+    }
 
-        sb.append("""
-                Required JSON Output Schema:
-                
-                {
-                  "template": "ATS",
-                  "contact": {
-                    "name": "",
-                    "location": "",
-                    "email": "",
-                    "phone": "",
-                    "linkedin": "",
-                    "github": ""
-                  },
-                  "summary": {
-                    "visible": true,
-                    "content": ""
-                  },
-                  "sections": [
-                    {
-                      "id": "education",
-                      "type": "education",
-                      "title": "Education",
-                      "visible": true,
-                      "order": 1,
-                      "items": [
-                        {
-                          "school": "",
-                          "degree": "",
-                          "major": "",
-                          "location": "",
-                          "startDate": "",
-                          "endDate": "",
-                          "gpa": "",
-                          "details": []
-                        }
-                      ]
-                    },
-                    {
-                      "id": "experience",
-                      "type": "experience",
-                      "title": "Experience",
-                      "visible": true,
-                      "order": 2,
-                      "items": [
-                        {
-                          "company": "",
-                          "title": "",
-                          "location": "",
-                          "startDate": "",
-                          "endDate": "",
-                          "visible": true,
-                          "bullets": []
-                        }
-                      ]
-                    },
-                    {
-                      "id": "projects",
-                      "type": "projects",
-                      "title": "Projects",
-                      "visible": true,
-                      "order": 3,
-                      "items": [
-                        {
-                          "name": "",
-                          "techStack": [],
-                          "startDate": "",
-                          "endDate": "",
-                          "visible": true,
-                          "bullets": []
-                        }
-                      ]
-                    },
-                    {
-                      "id": "skills",
-                      "type": "skills",
-                      "title": "Skills",
-                      "visible": true,
-                      "order": 4,
-                      "items": [
-                        {
-                          "category": "",
-                          "skills": []
-                        }
-                      ]
-                    }
-                  ]
-                }
-                
-                JSON Rules:
-                - Return exactly one JSON object.
-                - Do not wrap the JSON in Markdown code fences.
-                - Do not include any text before or after the JSON.
-                - Use double quotes for all JSON keys and string values.
-                - Use arrays for bullets, details, skills, techStack, sections, and items.
-                - Exclude null or empty fields when possible.
-                - Do not include trailing commas.
-                - Do not include null values.
-                - Do not include empty strings if the field is unavailable.
-                - If a section has no usable content, omit that section.
-                - Section order should reflect the best resume layout for the target job.
-                - Each section and item should include "visible": true.
-                - Keep "template" as "ATS".
-                - The renderer will determine visual formatting.
-                - Focus on producing semantically correct resume content rather than presentation.
-                - The JSON must be directly parseable by Jackson ObjectMapper.
-                
-                """);
-
-// =========================================================================
-// Target Job
-// =========================================================================
-
-        sb.append("<TargetJob>\n");
-
-        appendIfPresent(sb, "Title: ", job.getTitle());
-        appendIfPresent(sb, "Company: ", job.getCompany());
-
-        if (hasText(job.getJobDescription())) {
-            sb.append("Description:\n")
-                    .append(job.getJobDescription())
-                    .append("\n");
+    private String buildProjects(List<Project> projects) {
+        if (projects == null || projects.isEmpty()) {
+            return "";
         }
 
-        sb.append("</TargetJob>\n\n");
+        StringBuilder sb = new StringBuilder();
+        sb.append("<Projects>\\n");
 
-// =========================================================================
-// Candidate Resume Context
-// =========================================================================
+        for (Project project : projects) {
+            sb.append("- Project\\n");
 
-        sb.append("<CandidateResumeContext>\n")
-                .append(resumeContext)
-                .append("\n</CandidateResumeContext>\n\n");
+            appendIfPresent(sb, "  Project Name: ", project.getProjectName());
+            appendIfPresent(sb, "  Tech Stack: ", project.getTechStack());
+            appendIfPresent(sb, "  Start Date: ", project.getStartDate());
+            appendIfPresent(sb, "  End Date: ", project.getEndDate());
+            appendIfPresent(sb, "  Description: ", project.getDescription());
 
-// =========================================================================
-// Final Reminder
-// =========================================================================
+            sb.append("\\n");
+        }
 
-        sb.append("""
-                Final Reminder:
-                Use the Candidate Resume Context as the only source of candidate facts.
-                Experience and project bullets should be selected, rewritten, compressed, or merged only from the provided retrieved evidence.
-                Do not invent or add unsupported candidate details.
-                Skills may be curated and reorganized, but must come from the Candidate Resume Context.
-                Output only the JSON object.
-                Do not include Markdown, commentary, explanations, or plain resume text.
-                The response must be valid JSON and directly parseable by Jackson ObjectMapper.
-                """);
+        sb.append("</Projects>\\n\\n");
+        return sb.toString();
+    }
 
+    private String buildSkills(List<Skill> skills) {
+        if (skills == null || skills.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<Skills>\\n");
+
+        for (Skill skill : skills) {
+            if (hasText(skill.getCategory()) && hasText(skill.getName())) {
+                sb.append("- ")
+                        .append(skill.getCategory())
+                        .append(": ")
+                        .append(skill.getName())
+                        .append("\\n");
+            }
+        }
+
+        sb.append("</Skills>\\n\\n");
         return sb.toString();
     }
 
@@ -1161,3 +674,4 @@ public class ResumeService {
     }
 
 }
+
