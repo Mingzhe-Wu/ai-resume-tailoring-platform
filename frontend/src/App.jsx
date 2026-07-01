@@ -291,13 +291,19 @@ function App() {
   const pollGeneratedResume = (jobId, generationMethod) => {
     const intervalId = setInterval(async () => {
       try {
-        const res = await api.get(`/api/resume/fetch/${jobId}`, {
+        const statusResponse = await api.get(`/api/resume/generation-status/${jobId}`, {
           params: { generationMethod },
         });
 
-        if (res.data && res.data.needGenerate === false) {
+        const generationStatus = statusResponse.data?.status;
+
+        if (generationStatus === "PENDING" || generationStatus === "RUNNING") {
+          return;
+        }
+
+        if (generationStatus === "SUCCESS") {
           clearInterval(intervalId);
-          setResumeVersion(generationMethod, res.data);
+          await fetchResumeForJob(jobId, false, generationMethod);
           setResumeLoading(false);
           setResumePanelError("");
           setResumePanelMessage("");
@@ -308,17 +314,31 @@ function App() {
               ? "RAG resume generated successfully."
               : "Resume generated successfully."
           );
+          return;
         }
-      } catch (err) {
-        if (err.response?.status !== 404) {
+
+        if (generationStatus === "FAILED") {
           clearInterval(intervalId);
           setGeneratingJobId(null);
           setGeneratingResumeMethod(null);
           setResumeLoading(false);
-          const errorMessage = getApiErrorMessage(err, "Failed to check generated resume.");
+          const errorMessage =
+            statusResponse.data?.errorMessage || "Resume generation failed. Please try again.";
           setResumePanelError(errorMessage);
           showErrorToast(errorMessage);
         }
+      } catch (err) {
+        if (err.response?.status === 404) {
+          return;
+        }
+
+        clearInterval(intervalId);
+        setGeneratingJobId(null);
+        setGeneratingResumeMethod(null);
+        setResumeLoading(false);
+        const errorMessage = getApiErrorMessage(err, "Failed to check resume generation status.");
+        setResumePanelError(errorMessage);
+        showErrorToast(errorMessage);
       }
     }, 3000);
   };

@@ -11,6 +11,7 @@ import com.mingzhe.resumetailor.experience.Experience;
 import com.mingzhe.resumetailor.experience.ExperienceMapper;
 import com.mingzhe.resumetailor.generationhistory.GenerationHistoryService;
 import com.mingzhe.resumetailor.generationhistory.GenerationMethod;
+import com.mingzhe.resumetailor.generationhistory.GenerationStatusResponseDTO;
 import com.mingzhe.resumetailor.job.Job;
 import com.mingzhe.resumetailor.job.JobMapper;
 import com.mingzhe.resumetailor.openai.ChunkEmbeddingService;
@@ -196,11 +197,16 @@ public class ResumeService {
 
     @Async
     public void generateResumeAsync(Long jobId, boolean checkQuota) {
+        generateResumeAsync(jobId, checkQuota, null);
+    }
+
+    @Async
+    public void generateResumeAsync(Long jobId, boolean checkQuota, Long generationHistoryId) {
         log.info("Async resume generation started for jobId={}, thread={}",
                 jobId, Thread.currentThread().getName());
 
         try {
-            String result = generateResumeInternal(jobId, checkQuota);
+            String result = generateResumeInternal(jobId, checkQuota, generationHistoryId);
             log.info("Async resume generation finished for jobId={}, result={}", jobId, result);
         } catch (Exception e) {
             log.error("Async resume generation failed for jobId={}", jobId, e);
@@ -208,10 +214,10 @@ public class ResumeService {
     }
 
     public String generateResume(Long jobId) {
-        return generateResumeInternal(jobId, true);
+        return generateResumeInternal(jobId, true, null);
     }
 
-    private String generateResumeInternal(Long jobId, boolean checkQuota) {
+    private String generateResumeInternal(Long jobId, boolean checkQuota, Long generationHistoryId) {
         Long userId = null;
         PromptTemplate promptTemplate = null;
 
@@ -261,16 +267,26 @@ public class ResumeService {
                 resumeMapper.updateById(resume);
             }
 
-            generationHistoryService.recordSuccess(
-                    userId,
-                    jobId,
-                    resume.getId(),
-                    GenerationMethod.NORMAL,
-                    promptTemplate.getId(),
-                    openAiResumeService.getModelName(),
-                    aiResponse.getInputTokenCount(),
-                    aiResponse.getOutputTokenCount()
-            );
+            if (generationHistoryId == null) {
+                generationHistoryService.recordSuccess(
+                        userId,
+                        jobId,
+                        resume.getId(),
+                        GenerationMethod.NORMAL,
+                        promptTemplate.getId(),
+                        openAiResumeService.getModelName(),
+                        aiResponse.getInputTokenCount(),
+                        aiResponse.getOutputTokenCount()
+                );
+            } else {
+                generationHistoryService.markSuccess(
+                        generationHistoryId,
+                        resume.getId(),
+                        promptTemplate.getId(),
+                        aiResponse.getInputTokenCount(),
+                        aiResponse.getOutputTokenCount()
+                );
+            }
             log.info("Normal generation for userId: {} succeeded, generation information stored into generation history.", userId);
 
             return "Resume Generated";
@@ -278,18 +294,12 @@ public class ResumeService {
             if (userId == null) {
                 userId = findUserIdByJobId(jobId);
             }
-            recordGenerationFailure(
-                    userId,
-                    jobId,
-                    GenerationMethod.NORMAL,
-                    promptTemplate,
-                    ex
-            );
+            recordGenerationFailure(userId, jobId, GenerationMethod.NORMAL, promptTemplate, ex, generationHistoryId);
             throw ex;
         }
     }
 
-    public void checkAndIncreaseGenerationQuota(Long jobId) {
+    public Long checkAndIncreaseGenerationQuota(Long jobId) {
         Job job = jobMapper.findById(jobId);
         if (job == null) {
             throw new ResourceNotFoundException("Job not found");
@@ -301,6 +311,16 @@ public class ResumeService {
         }
 
         checkAndIncreaseGenerationQuotaForUser(userId);
+        return userId;
+    }
+
+    public Long recordAsyncGenerationRunning(Long userId, Long jobId, GenerationMethod generationMethod) {
+        return generationHistoryService.recordRunning(
+                userId,
+                jobId,
+                generationMethod,
+                openAiResumeService.getModelName()
+        );
     }
 
     private void checkAndIncreaseGenerationQuotaForUser(Long userId) {
@@ -326,11 +346,16 @@ public class ResumeService {
 
     @Async
     public void generateResumeWithRagAsync(Long jobId, boolean checkQuota) {
+        generateResumeWithRagAsync(jobId, checkQuota, null);
+    }
+
+    @Async
+    public void generateResumeWithRagAsync(Long jobId, boolean checkQuota, Long generationHistoryId) {
         log.info("Async RAG resume generation started for jobId={}, thread={}",
                 jobId, Thread.currentThread().getName());
 
         try {
-            String result = generateResumeWithRagInternal(jobId, checkQuota);
+            String result = generateResumeWithRagInternal(jobId, checkQuota, generationHistoryId);
             log.info("Async RAG resume generation finished for jobId={}, result={}", jobId, result);
         } catch (Exception e) {
             log.error("Async RAG resume generation failed for jobId={}", jobId, e);
@@ -338,10 +363,10 @@ public class ResumeService {
     }
 
     public String generateResumeWithRag(Long jobId) {
-        return generateResumeWithRagInternal(jobId, true);
+        return generateResumeWithRagInternal(jobId, true, null);
     }
 
-    private String generateResumeWithRagInternal(Long jobId, boolean checkQuota) {
+    private String generateResumeWithRagInternal(Long jobId, boolean checkQuota, Long generationHistoryId) {
         Long userId = null;
         PromptTemplate promptTemplate = null;
 
@@ -424,16 +449,26 @@ public class ResumeService {
                 resumeMapper.updateById(resume);
             }
 
-            generationHistoryService.recordSuccess(
-                    userId,
-                    jobId,
-                    resume.getId(),
-                    GenerationMethod.RAG,
-                    promptTemplate.getId(),
-                    openAiResumeService.getModelName(),
-                    aiResponse.getInputTokenCount(),
-                    aiResponse.getOutputTokenCount()
-            );
+            if (generationHistoryId == null) {
+                generationHistoryService.recordSuccess(
+                        userId,
+                        jobId,
+                        resume.getId(),
+                        GenerationMethod.RAG,
+                        promptTemplate.getId(),
+                        openAiResumeService.getModelName(),
+                        aiResponse.getInputTokenCount(),
+                        aiResponse.getOutputTokenCount()
+                );
+            } else {
+                generationHistoryService.markSuccess(
+                        generationHistoryId,
+                        resume.getId(),
+                        promptTemplate.getId(),
+                        aiResponse.getInputTokenCount(),
+                        aiResponse.getOutputTokenCount()
+                );
+            }
             log.info("RAG generation for userId: {} succeeded, generation information stored into generation history.", userId);
 
             return "RAG Resume Generated";
@@ -441,13 +476,7 @@ public class ResumeService {
             if (userId == null) {
                 userId = findUserIdByJobId(jobId);
             }
-            recordGenerationFailure(
-                    userId,
-                    jobId,
-                    GenerationMethod.RAG,
-                    promptTemplate,
-                    ex
-            );
+            recordGenerationFailure(userId, jobId, GenerationMethod.RAG, promptTemplate, ex, generationHistoryId);
             throw ex;
         }
     }
@@ -483,14 +512,40 @@ public class ResumeService {
             PromptTemplate promptTemplate,
             RuntimeException exception
     ) {
-        generationHistoryService.recordFailure(
-                userId,
-                jobId,
-                generationMethod,
-                promptTemplate == null ? null : promptTemplate.getId(),
-                openAiResumeService.getModelName(),
-                exception.getMessage()
-        );
+        recordGenerationFailure(userId, jobId, generationMethod, promptTemplate, exception, null);
+    }
+
+    private void recordGenerationFailure(
+            Long userId,
+            Long jobId,
+            GenerationMethod generationMethod,
+            PromptTemplate promptTemplate,
+            RuntimeException exception,
+            Long generationHistoryId
+    ) {
+        Long promptTemplateId = promptTemplate == null ? null : promptTemplate.getId();
+        if (generationHistoryId == null) {
+            generationHistoryService.recordFailure(
+                    userId,
+                    jobId,
+                    generationMethod,
+                    promptTemplateId,
+                    openAiResumeService.getModelName(),
+                    exception.getMessage()
+            );
+        } else {
+            generationHistoryService.markFailure(generationHistoryId, promptTemplateId, exception.getMessage());
+        }
+    }
+
+    public GenerationStatusResponseDTO fetchGenerationStatus(
+            Long jobId,
+            ResumeGenerationMethod generationMethod
+    ) {
+        ResumeGenerationMethod method = generationMethod == null
+                ? ResumeGenerationMethod.NORMAL
+                : generationMethod;
+        return generationHistoryService.findLatestStatus(jobId, GenerationMethod.valueOf(method.name()));
     }
 
     private Long findUserIdByJobId(Long jobId) {

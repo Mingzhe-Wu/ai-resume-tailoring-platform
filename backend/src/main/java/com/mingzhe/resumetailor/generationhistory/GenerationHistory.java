@@ -20,4 +20,6 @@ public class GenerationHistory {
     private Integer outputTokenCount;
     private BigDecimal estimatedCostUsd;
     private LocalDateTime createdAt;
+    private LocalDateTime startedAt;
+    private LocalDateTime completedAt;
 }
