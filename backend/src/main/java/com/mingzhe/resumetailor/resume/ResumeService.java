@@ -33,6 +33,7 @@ import com.mingzhe.resumetailor.redis.RateLimitService;
 import com.mingzhe.resumetailor.skill.Skill;
 import com.mingzhe.resumetailor.skill.SkillMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -64,6 +65,7 @@ public class ResumeService {
     private final GenerationHistoryService generationHistoryService;
     private final AiQuotaService aiQuotaService;
     private final RateLimitService rateLimitService;
+    private final long resumeGenerateRateLimitPerMinute;
 
     private static final int EXP_AND_PROJECT_TOP_K = 11;
     private static final int SKILL_TOP_K = 5;
@@ -83,7 +85,10 @@ public class ResumeService {
             SemanticRetrievalService semanticRetrievalService,
             ResumeContextBuilderService resumeContextBuilderService,
             PromptTemplateService promptTemplateService,
-            GenerationHistoryService generationHistoryService, AiQuotaService aiQuotaService, RateLimitService rateLimitService
+            GenerationHistoryService generationHistoryService,
+            AiQuotaService aiQuotaService,
+            RateLimitService rateLimitService,
+            @Value("${ai.rate-limit.resume-generate-per-minute:3}") long resumeGenerateRateLimitPerMinute
     ) {
         this.jobMapper = jobMapper;
         this.profileMapper = profileMapper;
@@ -102,6 +107,7 @@ public class ResumeService {
         this.generationHistoryService = generationHistoryService;
         this.aiQuotaService = aiQuotaService;
         this.rateLimitService = rateLimitService;
+        this.resumeGenerateRateLimitPerMinute = resumeGenerateRateLimitPerMinute;
     }
 
     public Resume createResume(CreateResumeDTO request) {
@@ -328,7 +334,7 @@ public class ResumeService {
             rateLimitService.checkAndIncrease(
                     userId,
                     "resume-generate",
-                    3,
+                    resumeGenerateRateLimitPerMinute,
                     Duration.ofMinutes(1)
             );
         } catch (RuntimeException e) {

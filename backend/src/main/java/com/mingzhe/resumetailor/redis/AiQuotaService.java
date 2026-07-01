@@ -2,6 +2,7 @@ package com.mingzhe.resumetailor.redis;
 
 import com.mingzhe.resumetailor.exceptions.TooManyRequestsException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -12,18 +13,21 @@ import java.time.LocalDateTime;
 @Service
 public class AiQuotaService {
 
-    private static final long DAILY_AI_CALL_LIMIT = 100;
-
     private final RedisCacheService redisCacheService;
+    private final long dailyAiCallLimit;
 
-    public AiQuotaService(RedisCacheService redisCacheService) {
+    public AiQuotaService(
+            RedisCacheService redisCacheService,
+            @Value("${ai.quota.daily-limit:100}") long dailyAiCallLimit
+    ) {
         this.redisCacheService = redisCacheService;
+        this.dailyAiCallLimit = dailyAiCallLimit;
     }
 
     public void checkAndIncreaseDailyUsage(Long userId) {
         long count = increaseDailyUsage(userId);
 
-        if (count > DAILY_AI_CALL_LIMIT) {
+        if (count > dailyAiCallLimit) {
             throw new TooManyRequestsException("Daily AI usage limit reached. Please try again tomorrow.");
         }
         log.info("Quota limit checked for userId: {}, currently {} times.", userId, count);
@@ -44,10 +48,10 @@ public class AiQuotaService {
         String key = RedisKeyConstants.dailyAiQuotaKey(userId, LocalDate.now());
         String value = redisCacheService.get(key);
         if (value == null) {
-            return DAILY_AI_CALL_LIMIT;
+            return dailyAiCallLimit;
         }
 
-        return Math.max(0, DAILY_AI_CALL_LIMIT - Long.parseLong(value));
+        return Math.max(0, dailyAiCallLimit - Long.parseLong(value));
     }
 
     public long increaseDailyUsage(Long userId) {
@@ -67,6 +71,6 @@ public class AiQuotaService {
     }
 
     public long getDailyLimit() {
-        return DAILY_AI_CALL_LIMIT;
+        return dailyAiCallLimit;
     }
 }
