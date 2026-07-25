@@ -2,15 +2,25 @@ import EditableEducationItem from "./EditableEducationItem.jsx";
 import EditableExperienceItem from "./EditableExperienceItem.jsx";
 import EditableProjectItem from "./EditableProjectItem.jsx";
 import EditableSkillItem from "./EditableSkillItem.jsx";
-import { appendEmptySkillItem, getResumeSectionTitle, isEmptySkillItem } from "./resumeUtils.js";
+import {
+  appendEmptyResumeSectionItem,
+  appendEmptySkillItem,
+  getResumeSectionTitle,
+  isEmptyResumeSectionItem,
+} from "./resumeUtils.js";
 
 export default function EditableResumeSection({ section, onChange }) {
   const items = Array.isArray(section.items)
     ? section.items.filter((item) => item.visible !== false)
     : [];
   const type = String(section.type || "").toLowerCase();
+  const isEducation = type.includes("education");
+  const isExperience = type.includes("experience");
+  const isProject = type.includes("project");
+  const isSkill = type.includes("skill");
+  const canAddItem = isEducation || isExperience || isProject || isSkill;
 
-  if (items.length === 0 && !type.includes("skill")) return null;
+  if (items.length === 0 && !canAddItem) return null;
 
   const updateItem = (item, nextItem) => {
     onChange({
@@ -21,28 +31,44 @@ export default function EditableResumeSection({ section, onChange }) {
             ? nextItem
             : sectionItem
         )
-        .filter((sectionItem) => !(type.includes("skill") && isEmptySkillItem(sectionItem))),
+        .filter((sectionItem) => !isEmptyResumeSectionItem(sectionItem, type)),
     });
   };
+
+  const addItem = () => {
+    onChange(
+      isSkill
+        ? appendEmptySkillItem(section)
+        : appendEmptyResumeSectionItem(section)
+    );
+  };
+
+  const itemLabel = isEducation
+    ? "education"
+    : isExperience
+      ? "experience"
+      : isProject
+        ? "project"
+        : "skill category";
 
   return (
     <section className="ats-section">
       <h2 className="ats-section-heading">
         <span>{section.title || getResumeSectionTitle(type)}</span>
-        {type.includes("skill") && (
+        {canAddItem && (
           <button
             type="button"
             className="ats-add-bullet-button ats-add-skill-button"
-            onClick={() => onChange(appendEmptySkillItem(section))}
-            aria-label="Add skill category"
-            title="Add skill category"
+            onClick={addItem}
+            aria-label={`Add ${itemLabel}`}
+            title={`Add ${itemLabel}`}
           >
             +
           </button>
         )}
       </h2>
 
-      {type.includes("experience") && items.map((item, index) => (
+      {isExperience && items.map((item, index) => (
         <EditableExperienceItem
           key={item.id || index}
           item={item}
@@ -50,7 +76,7 @@ export default function EditableResumeSection({ section, onChange }) {
         />
       ))}
 
-      {type.includes("project") && items.map((item, index) => (
+      {isProject && items.map((item, index) => (
         <EditableProjectItem
           key={item.id || index}
           item={item}
@@ -58,7 +84,7 @@ export default function EditableResumeSection({ section, onChange }) {
         />
       ))}
 
-      {type.includes("education") && items.map((item, index) => (
+      {isEducation && items.map((item, index) => (
         <EditableEducationItem
           key={item.id || index}
           item={item}
@@ -66,7 +92,7 @@ export default function EditableResumeSection({ section, onChange }) {
         />
       ))}
 
-      {type.includes("skill") && items.map((item, index) => (
+      {isSkill && items.map((item, index) => (
         <EditableSkillItem
           key={item.id || index}
           item={item}

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { sortResumeSections } from "./resumeUtils.js";
+import {
+  appendEmptyResumeSectionItem,
+  isEmptyResumeSectionItem,
+  sanitizeResumeBulletFields,
+  sortResumeSections,
+} from "./resumeUtils.js";
 
 test("sortResumeSections uses the fixed resume display order", () => {
   const sections = [
@@ -31,4 +36,66 @@ test("sortResumeSections recognizes section id and keeps unknown sections last",
     sortResumeSections(sections).map((section) => section.id),
     ["education", "experience", "project", "skill", "awards", "certifications"]
   );
+});
+
+test("appendEmptyResumeSectionItem creates editable placeholders for each evidence type", () => {
+  const education = appendEmptyResumeSectionItem({ type: "education", items: [] });
+  const experience = appendEmptyResumeSectionItem({ type: "experience", items: [] });
+  const projects = appendEmptyResumeSectionItem({ type: "projects", items: [] });
+
+  assert.deepEqual(education.items[0].details, [""]);
+  assert.equal(education.items[0].school, "");
+  assert.deepEqual(experience.items[0].bullets, [""]);
+  assert.equal(experience.items[0].company, "");
+  assert.deepEqual(projects.items[0].bullets, [""]);
+  assert.deepEqual(projects.items[0].techStack, []);
+});
+
+test("isEmptyResumeSectionItem removes an evidence item only after all content is blank", () => {
+  assert.equal(
+    isEmptyResumeSectionItem(
+      { company: "", title: "", location: "", bullets: [""] },
+      "experience"
+    ),
+    true
+  );
+  assert.equal(
+    isEmptyResumeSectionItem(
+      { company: "", title: "Engineer", location: "", bullets: [""] },
+      "experience"
+    ),
+    false
+  );
+  assert.equal(
+    isEmptyResumeSectionItem(
+      { name: "", techStack: [], bullets: ["Implemented APIs"] },
+      "projects"
+    ),
+    false
+  );
+});
+
+test("sanitizeResumeBulletFields removes blank evidence placeholders before save", () => {
+  const resume = {
+    sections: [
+      {
+        type: "education",
+        items: [
+          { school: "", degree: "", details: [""] },
+          { school: "State University", degree: "B.S.", details: ["", "Coursework"] },
+        ],
+      },
+    ],
+  };
+
+  assert.deepEqual(sanitizeResumeBulletFields(resume), {
+    sections: [
+      {
+        type: "education",
+        items: [
+          { school: "State University", degree: "B.S.", details: ["Coursework"] },
+        ],
+      },
+    ],
+  });
 });

@@ -173,6 +173,53 @@ export function appendEmptySkillItem(section) {
   };
 }
 
+export function appendEmptyResumeSectionItem(section) {
+  const type = String(section?.type || section?.id || "").toLowerCase();
+  let item;
+
+  if (type.includes("education")) {
+    item = {
+      school: "",
+      degree: "",
+      major: "",
+      location: "",
+      startDate: "",
+      endDate: "",
+      gpa: "",
+      details: [""],
+    };
+  } else if (type.includes("experience")) {
+    item = {
+      company: "",
+      title: "",
+      location: "",
+      startDate: "",
+      endDate: "",
+      visible: true,
+      bullets: [""],
+    };
+  } else if (type.includes("project")) {
+    item = {
+      name: "",
+      techStack: [],
+      startDate: "",
+      endDate: "",
+      visible: true,
+      bullets: [""],
+    };
+  } else {
+    return section;
+  }
+
+  return {
+    ...section,
+    items: [
+      ...(Array.isArray(section.items) ? section.items : []),
+      item,
+    ],
+  };
+}
+
 export function parseDelimitedListLike(originalValue, value, preferredSeparator) {
   if (!Array.isArray(originalValue)) {
     return value;
@@ -196,7 +243,7 @@ export function sanitizeResumeBulletFields(value) {
   if (Array.isArray(value)) {
     return value
       .map((item) => sanitizeResumeBulletFields(item))
-      .filter((item) => !isEmptySkillItem(item));
+      .filter((item) => !isEmptyResumeSectionItem(item));
   }
 
   if (!value || typeof value !== "object") {
@@ -231,6 +278,99 @@ export function isEmptySkillItem(item) {
     : String(skillValue || "");
 
   return !String(item.category || "").trim() && !skillText.trim();
+}
+
+export function isEmptyResumeSectionItem(item, sectionType = "") {
+  if (!item || typeof item !== "object" || Array.isArray(item)) {
+    return false;
+  }
+
+  const type = String(sectionType || "").toLowerCase();
+  if (type.includes("skill") || (!type && Object.prototype.hasOwnProperty.call(item, "category"))) {
+    return isEmptySkillItem(item);
+  }
+
+  let fields;
+  if (
+    type.includes("education") ||
+    (!type && ["school", "schoolName", "degree", "major", "gpa"].some((field) =>
+      Object.prototype.hasOwnProperty.call(item, field)
+    ))
+  ) {
+    fields = [
+      "school",
+      "schoolName",
+      "degree",
+      "major",
+      "location",
+      "startDate",
+      "endDate",
+      "gpa",
+      "details",
+      "relevantCoursework",
+      "description",
+      "bullets",
+    ];
+  } else if (
+    type.includes("experience") ||
+    (!type && ["company", "companyName", "position", "role"].some((field) =>
+      Object.prototype.hasOwnProperty.call(item, field)
+    ))
+  ) {
+    fields = [
+      "company",
+      "companyName",
+      "title",
+      "position",
+      "role",
+      "location",
+      "startDate",
+      "endDate",
+      "bullets",
+      "details",
+      "description",
+    ];
+  } else if (
+    type.includes("project") ||
+    (!type && ["projectName", "techStack"].some((field) =>
+      Object.prototype.hasOwnProperty.call(item, field)
+    ))
+  ) {
+    fields = [
+      "name",
+      "projectName",
+      "techStack",
+      "startDate",
+      "endDate",
+      "bullets",
+      "details",
+      "description",
+      "url",
+      "projectUrl",
+      "project_url",
+      "demoUrl",
+      "demo_url",
+      "githubUrl",
+      "github_url",
+      "link",
+    ];
+  } else {
+    return false;
+  }
+
+  return !fields.some((field) => hasMeaningfulResumeValue(item[field]));
+}
+
+function hasMeaningfulResumeValue(value) {
+  if (Array.isArray(value)) {
+    return value.some((item) => hasMeaningfulResumeValue(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.values(value).some((item) => hasMeaningfulResumeValue(item));
+  }
+
+  return value != null && String(value).trim() !== "";
 }
 
 export function deepClone(value) {
