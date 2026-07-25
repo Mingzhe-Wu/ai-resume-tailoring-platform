@@ -44,6 +44,7 @@ public class AuthService {
             throw new BadRequestException("Invalid email or password");
         }
 
+        userMapper.updateLastLoginAt(user.getId());
         String token = jwtService.generateToken(user);
 
         UserResponseDTO userResponse = new UserResponseDTO();

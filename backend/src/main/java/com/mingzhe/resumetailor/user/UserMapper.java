@@ -33,7 +33,8 @@ public interface UserMapper {
             role::text AS role,
             status::text AS status,
             created_at,
-            updated_at
+            updated_at,
+            last_login_at
         FROM users
         WHERE id = #{id}
         """)
@@ -47,7 +48,8 @@ public interface UserMapper {
             role::text AS role,
             status::text AS status,
             created_at,
-            updated_at
+            updated_at,
+            last_login_at
         FROM users
         WHERE email = #{email}
         """)
@@ -65,6 +67,13 @@ public interface UserMapper {
         </script>
         """)
     int updateById(User user);
+
+    @Update("""
+        UPDATE users
+        SET last_login_at = CURRENT_TIMESTAMP
+        WHERE id = #{userId}
+        """)
+    int updateLastLoginAt(Long userId);
 
     @Delete("""
         DELETE FROM users

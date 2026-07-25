@@ -24,4 +24,6 @@ public class User {
 
     private LocalDateTime updatedAt;
 
+    private LocalDateTime lastLoginAt;
+
 }
